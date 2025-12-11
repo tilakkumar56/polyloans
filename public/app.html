@@ -88,7 +88,7 @@
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Lock Shares</label>
-                            <input type="number" id="b_shares" placeholder="0" class="input-premium w-full rounded-xl px-4 py-3 text-sm font-mono" oninput="checkLTV()">
+                            <input type="number" id="b_shares" placeholder="0.00" class="input-premium w-full rounded-xl px-4 py-3 text-sm font-mono" oninput="checkLTV()">
                         </div>
                         <div>
                             <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Get USDC</label>
@@ -96,7 +96,17 @@
                         </div>
                     </div>
 
-                    <div id="ltvWarning" class="text-xs h-5 font-mono text-right"></div>
+                    <!-- LTV Visual Bar -->
+                    <div id="ltvContainer" class="bg-[#050608] rounded-lg p-3 border border-[#1E2129] hidden">
+                        <div class="flex justify-between text-[10px] uppercase font-bold mb-1">
+                            <span class="text-gray-500">Risk Meter</span>
+                            <span id="ltvValue" class="text-indigo-400">0%</span>
+                        </div>
+                        <div class="w-full bg-[#1E2129] rounded-full h-1.5 overflow-hidden">
+                            <div id="ltvBar" class="bg-indigo-500 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <div id="ltvWarning" class="text-xs mt-2 font-mono text-right h-4"></div>
+                    </div>
 
                     <div>
                         <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Duration (Days)</label>
@@ -166,7 +176,7 @@
 
     </main>
 
-    <!-- JS LOGIC PRESERVED -->
+    <!-- LOGIC -->
     <script>
     const MARKET_ADDR = "0xf8bF64E5c8f42002119B8Dbf516a9c5eD06cc2e5"; 
     const USDC_ADDR = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"; 
@@ -236,6 +246,7 @@
         const opt = sel.options[sel.selectedIndex];
         const display = document.getElementById("priceDisplay");
         const btn = document.getElementById("btnCreate");
+        const ltvBox = document.getElementById("ltvContainer");
 
         if(opt.value) {
             document.getElementById("b_tokenId").value = opt.value;
@@ -248,10 +259,15 @@
             } else {
                 display.innerHTML = `<span class="text-emerald-400 font-bold">✅ High Quality ($${price.toFixed(2)})</span>`;
             }
+            // Enable button visually
+            btn.classList.remove("bg-gray-700", "text-gray-400", "cursor-not-allowed");
+            btn.classList.add("bg-brand", "text-white", "hover:bg-brandHover");
             btn.disabled = false;
+            ltvBox.classList.remove("hidden");
         }
     }
 
+    // --- UPDATED: MAX LTV 50% ---
     function checkLTV() {
         const shares = Number(document.getElementById("b_shares").value);
         const principal = Number(document.getElementById("b_principal").value);
@@ -260,15 +276,31 @@
         const opt = sel.options[sel.selectedIndex];
         const price = opt && opt.value ? Number(opt.getAttribute("data-price")) : 0;
         const effectivePrice = price > 0 ? price : 1.00;
+
+        const ltvBar = document.getElementById("ltvBar");
+        const ltvValue = document.getElementById("ltvValue");
+
         if (shares > 0) {
             const collateralValue = shares * effectivePrice;
-            const maxLoan = collateralValue * 0.75; 
+            
+            // 🔥 CHANGED: 50% MAX LTV
+            const maxLoan = collateralValue * 0.50; 
             const ltv = (principal / collateralValue) * 100;
-            if (principal > maxLoan) {
-                warning.innerHTML = `<span class="text-red-500">❌ >75% LTV (Max: $${maxLoan.toFixed(2)})</span>`;
+            
+            // Visual Bar Update
+            const barWidth = Math.min(ltv, 100);
+            ltvBar.style.width = barWidth + "%";
+            ltvValue.innerText = ltv.toFixed(1) + "%";
+            
+            if(ltv > 50) { // Changed threshold to 50
+                ltvBar.classList.remove("bg-brand", "bg-emerald-500");
+                ltvBar.classList.add("bg-red-500");
+                warning.innerHTML = `<span class="text-red-500 font-bold">❌ >50% LTV (Max: $${maxLoan.toFixed(2)})</span>`;
                 document.getElementById("btnCreate").disabled = true;
             } else {
-                warning.innerHTML = `<span class="text-emerald-400">✅ LTV: ${ltv.toFixed(1)}%</span>`;
+                ltvBar.classList.remove("bg-red-500", "bg-emerald-500");
+                ltvBar.classList.add("bg-brand");
+                warning.innerHTML = `<span class="text-emerald-400 font-bold">✅ Healthy LTV</span>`;
                 document.getElementById("btnCreate").disabled = false;
             }
         }
@@ -279,13 +311,15 @@
         const shares = document.getElementById("b_shares").value; 
         const principal = document.getElementById("b_principal").value; 
         const duration = document.getElementById("b_duration").value || 0;
+        
         const status = document.getElementById("b_status");
-        status.innerText = "⏳ Requesting...";
+        status.innerText = "⏳ Requesting signature...";
+        
         await fetch(`${RENDER_API_URL}/create-request`, {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ tokenId: id, shares, principal, duration, userAddress })
         });
-        status.innerText = "✅ Posted!";
+        status.innerText = "✅ Request Posted!";
         setTimeout(loadMarketFeed, 3000);
     }
 
@@ -326,7 +360,7 @@
         const rate = Number(document.getElementById("rate_" + reqId).value) * 100;
         const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
         await (await usdc.approve(MARKET_ADDR, ethers.MaxUint256)).wait();
-        await (await marketContract.makeOffer(reqId, rate, 0)).wait(); // Fixed duration for now
+        await (await marketContract.makeOffer(reqId, rate, 0)).wait(); 
         alert("✅ Offer Sent!");
         loadMyOffers(); 
     }
@@ -427,17 +461,6 @@
         alert("✅ Repaid!");
         location.reload();
     }
-    
-    async function liquidate(id) {
-        if(!confirm("Seize collateral?")) return;
-        try {
-            const tx = await marketContract.liquidateByTime(id);
-            await tx.wait();
-            alert("⚡ ASSETS SEIZED!");
-            location.reload();
-        } catch(e) { alert(e.message); }
-    }
     </script>
 </body>
 </html>
-```
