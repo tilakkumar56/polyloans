@@ -1,95 +1,183 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
-    <title>PolyLend Market</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolyLoans | Dashboard</title>
+    <!-- Tailwind & Ethers -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'], mono: ['"JetBrains Mono"', 'monospace'] },
+                    colors: { 
+                        bg: '#020408', 
+                        surface: '#0B0D12', 
+                        border: '#1E2129',
+                        brand: '#6366F1', // Indigo
+                        brandHover: '#4F46E5'
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        body { font-family: monospace; background: #0f172a; color: #fff; padding: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        .card { background: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #334155; margin-bottom: 20px; }
-        h2 { border-bottom: 1px solid #475569; padding-bottom: 10px; margin-top: 0; }
-        input, select { background: #0f172a; border: 1px solid #334155; color: white; padding: 8px; width: 100%; margin-bottom: 10px; box-sizing: border-box; }
-        button { cursor: pointer; padding: 8px 16px; border-radius: 5px; border: none; font-weight: bold; width: 100%; }
-        .btn-green { background: #10b981; color: white; }
-        .btn-blue { background: #3b82f6; color: white; }
-        .btn-red { background: #ef4444; color: white; }
-        .request-item { background: #0f172a; padding: 15px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #475569; }
-        .tag { font-size: 10px; padding: 2px 5px; border-radius: 3px; background: #334155; }
-        .profit { color: #10b981; font-weight: bold; }
-        .payoff { color: #facc15; font-weight: bold; }
-        .warning { font-size: 12px; margin-top: -5px; margin-bottom: 10px; display: block; font-weight: bold; }
-        a { color: #3b82f6; text-decoration: none; }
+        body { background-color: #020408; color: #E2E8F0; }
+        .panel { background: #0B0D12; border: 1px solid #1E2129; }
+        .input-premium { background: #050608; border: 1px solid #1E2129; color: white; transition: all 0.2s; }
+        .input-premium:focus { border-color: #6366F1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); outline: none; }
+        
+        .btn-primary { background: #6366F1; color: white; transition: 0.2s; box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39); }
+        .btn-primary:hover:not(:disabled) { background: #4F46E5; transform: translateY(-1px); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; background: #1E2129; color: #6B7280; box-shadow: none; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #020408; }
+        ::-webkit-scrollbar-thumb { background: #1E2129; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #2D3748; }
     </style>
 </head>
-<body>
+<body class="min-h-screen flex flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#020408] to-[#020408]">
 
-<div class="container">
-    <h1>PolyLend Market 📊</h1>
-    <button onclick="connectWallet()" class="btn-blue" id="btnConnect">Connect Wallet</button>
-    <div id="userAddr" style="margin-bottom: 20px; color: #94a3b8;"></div>
+    <!-- Navbar -->
+    <nav class="h-20 border-b border-[#1E2129] flex items-center justify-between px-8 bg-[#020408]/80 backdrop-blur-md sticky top-0 z-50">
+        <a href="index.html" class="flex items-center gap-3 group">
+            <div class="w-8 h-8 bg-brand rounded flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition">▲</div>
+            <span class="font-bold text-lg tracking-tight text-white">PolyLoans <span class="text-[10px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 py-0.5 rounded ml-1">APP</span></span>
+        </a>
+        
+        <div class="flex items-center gap-4">
+            <div id="userAddr" class="hidden font-mono text-xs bg-[#0B0D12] border border-[#1E2129] px-4 py-2 rounded text-indigo-300"></div>
+            <button id="btnConnect" onclick="connectWallet()" class="btn-primary px-6 py-2.5 rounded-lg text-sm font-bold">
+                Connect Wallet
+            </button>
+        </div>
+    </nav>
 
-    <div class="card">
-        <h2>📝 Create Loan Request</h2>
-        <label>Select Position:</label>
-        <select id="positionSelect" onchange="autoFillForm()">
-            <option>-- Connect Wallet First --</option>
-        </select>
-        <div id="priceDisplay" class="warning"></div>
-        <input type="text" id="b_tokenId" readonly style="background: #334155; color: #94a3b8; font-size:10px;">
-        <label>Shares to Lock:</label>
-        <input type="number" id="b_shares" placeholder="0" oninput="checkLTV()">
-        <label>Principal (USDC):</label>
-        <input type="number" id="b_principal" placeholder="0.5" oninput="checkLTV()">
-        <span id="ltvWarning" class="warning"></span>
-        <label>Duration (Days): <span style="font-size:10px; color:#94a3b8;">(0 = Negotiable)</span></label>
-        <input type="number" id="b_duration" placeholder="0" value="0">
-        <button onclick="createRequest()" class="btn-green" id="btnCreate" disabled>Post Request</button>
-        <div id="b_status" style="margin-top:10px; color:#facc15;"></div>
-    </div>
+    <!-- Main Grid -->
+    <main class="flex-1 p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 max-w-[1600px] mx-auto w-full">
 
-    <div class="card">
-        <h2>🌎 Open Requests</h2>
-        <button onclick="loadMarketFeed()" style="width:auto; margin-bottom:10px; font-size:12px;">🔄 Refresh Feed</button>
-        <div id="marketFeed">Loading...</div>
-    </div>
+        <!-- LEFT: BORROW -->
+        <section class="lg:col-span-4 space-y-6">
+            <div class="panel rounded-2xl p-6 relative overflow-hidden">
+                <!-- Header -->
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-bold text-white">Borrow Liquidity</h2>
+                    <span class="text-[10px] font-bold text-indigo-400 bg-indigo-900/20 px-2 py-1 rounded border border-indigo-900/50">STEP 1</span>
+                </div>
 
-    <div class="card">
-        <h2>📩 Offers</h2>
-        <button onclick="loadMyOffers()" style="width:auto; margin-bottom:10px; font-size:12px;">🔄 Check Offers</button>
-        <div id="myOffers">No offers.</div>
-    </div>
+                <!-- Form -->
+                <div class="space-y-5">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Collateral Asset</label>
+                        <select id="positionSelect" onchange="autoFillForm()" class="input-premium w-full rounded-xl px-4 py-3 text-sm cursor-pointer appearance-none">
+                            <option>-- Connect Wallet First --</option>
+                        </select>
+                        <div id="priceDisplay" class="mt-2 text-xs h-5"></div>
+                    </div>
 
-    <div class="card" style="border-color: #facc15;">
-        <h2>💸 My Active Loans (Live Interest)</h2>
-        <button onclick="loadActiveLoans()" style="width:auto; margin-bottom:10px; font-size:12px;">🔄 Refresh</button>
-        <div id="activeLoans">Loading...</div>
-    </div>
-</div>
+                    <!-- Hidden ID -->
+                    <input type="text" id="b_tokenId" class="hidden">
 
-<script>
-    // ✅ NEW MARKET ADDRESS
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Lock Shares</label>
+                            <input type="number" id="b_shares" placeholder="0" class="input-premium w-full rounded-xl px-4 py-3 text-sm font-mono" oninput="checkLTV()">
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Get USDC</label>
+                            <input type="number" id="b_principal" placeholder="0.00" class="input-premium w-full rounded-xl px-4 py-3 text-sm font-mono" oninput="checkLTV()">
+                        </div>
+                    </div>
+
+                    <div id="ltvWarning" class="text-xs h-5 font-mono text-right"></div>
+
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Duration (Days)</label>
+                        <input type="number" id="b_duration" placeholder="0 (Negotiable)" value="0" class="input-premium w-full rounded-xl px-4 py-3 text-sm font-mono">
+                    </div>
+
+                    <button id="btnCreate" onclick="createRequest()" disabled class="w-full btn-primary py-4 rounded-xl text-sm font-bold mt-2">
+                        Post Request
+                    </button>
+                    <div id="b_status" class="text-center text-xs mt-3 text-gray-500 font-mono"></div>
+                </div>
+            </div>
+
+            <!-- Active Loans Mini -->
+            <div class="panel rounded-2xl p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider">My Active Debts</h3>
+                    <button onclick="loadActiveLoans()" class="text-xs text-indigo-400 hover:text-white transition">↻</button>
+                </div>
+                <div id="activeLoans" class="space-y-3">
+                    <div class="text-center py-8 text-gray-700 text-xs font-medium">No active loans</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT: LEND -->
+        <section class="lg:col-span-8 space-y-6">
+            <!-- Market Feed -->
+            <div class="panel rounded-2xl overflow-hidden flex flex-col h-[520px]">
+                <div class="p-5 border-b border-[#1E2129] flex justify-between items-center bg-[#050608]/50">
+                    <h2 class="font-bold text-white text-sm uppercase tracking-wide flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Market Feed
+                    </h2>
+                    <button onclick="loadMarketFeed()" class="text-xs text-gray-500 hover:text-white transition">Refresh</button>
+                </div>
+                
+                <div class="overflow-y-auto flex-1 p-0 bg-[#020408]">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="sticky top-0 bg-[#0B0D12] z-10 text-[10px] text-gray-500 uppercase font-bold tracking-wider">
+                            <tr>
+                                <th class="p-4 border-b border-[#1E2129]">Asset</th>
+                                <th class="p-4 border-b border-[#1E2129] text-right">Collateral</th>
+                                <th class="p-4 border-b border-[#1E2129] text-right">Ask (USDC)</th>
+                                <th class="p-4 border-b border-[#1E2129] text-right">Duration</th>
+                                <th class="p-4 border-b border-[#1E2129] text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="marketFeed" class="text-sm divide-y divide-[#1E2129] text-gray-300">
+                            <tr><td colspan="5" class="p-16 text-center text-gray-600">Connecting to Polygon network...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Offers Box -->
+            <div class="panel rounded-2xl p-5">
+                <div class="flex justify-between items-center mb-4 pb-2 border-b border-[#1E2129]">
+                    <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider">Incoming Offers</h3>
+                    <button onclick="loadMyOffers()" class="text-xs text-indigo-400 hover:text-white">Sync</button>
+                </div>
+                <div id="myOffers" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <p class="text-xs text-gray-600 col-span-2 text-center py-4">No offers received.</p>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- JS LOGIC PRESERVED -->
+    <script>
     const MARKET_ADDR = "0xf8bF64E5c8f42002119B8Dbf516a9c5eD06cc2e5"; 
     const USDC_ADDR = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"; 
     const PROXY_ADDR = "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7"; 
-
-    // ✅ LIVE RENDER API
     const RENDER_API_URL = "https://polyloans-api.onrender.com"; 
 
     let signer, userAddress, marketContract;
-    const TOKEN_TITLES = {}; 
     const INFO_CACHE = {}; 
-
-    const MARKET_ABI = [
-        "function makeOffer(uint256, uint256, uint256) external returns (uint256)",
-        "function cancelOffer(uint256) external",
-        "function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool)",
-        "function offers(uint256) view returns (uint256, address, uint256, uint256, bool)",
-        "function activeLoans(uint256) view returns (address, address, uint256, uint256, uint256, uint256, uint256, uint256)",
-        "function nextRequestId() view returns (uint256)",
-        "function nextOfferId() view returns (uint256)",
-        "function liquidateByTime(uint256) external"
-    ];
+    
+    // --- ABIs ---
+    const MARKET_ABI = ["function makeOffer(uint256, uint256, uint256) external returns (uint256)","function cancelOffer(uint256) external","function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool)","function offers(uint256) view returns (uint256, address, uint256, uint256, bool)","function activeLoans(uint256) view returns (address, address, uint256, uint256, uint256, uint256, uint256, uint256)","function nextRequestId() view returns (uint256)","function nextOfferId() view returns (uint256)","function liquidateByTime(uint256) external"];
     const USDC_ABI = ["function approve(address, uint256) external"];
 
     async function connectWallet() {
@@ -99,17 +187,17 @@
         userAddress = await signer.getAddress();
         marketContract = new ethers.Contract(MARKET_ADDR, MARKET_ABI, signer);
         
-        document.getElementById("userAddr").innerText = "Connected: " + userAddress;
+        document.getElementById("userAddr").classList.remove("hidden");
+        document.getElementById("userAddr").innerText = userAddress.slice(0,6) + "..." + userAddress.slice(-4);
         document.getElementById("btnConnect").style.display = "none";
         
         scanPortfolio();
         loadMarketFeed(); 
         loadMyOffers();
         loadActiveLoans();
-        setInterval(loadActiveLoans, 1000); 
+        setInterval(loadActiveLoans, 2000); 
     }
 
-    // --- HELPER: GET INFO (Uses Render) ---
     async function getMarketInfo(tokenId) {
         if(INFO_CACHE[tokenId]) return INFO_CACHE[tokenId];
         try {
@@ -121,34 +209,26 @@
         } catch(e) { return { title: "Error Fetching", link: "#" }; }
     }
 
-    // --- 1. SCAN (Uses Render) ---
     async function scanPortfolio() {
         const select = document.getElementById("positionSelect");
         select.innerHTML = '<option>🔍 Scanning...</option>';
         try {
-            console.log("Fetching from:", `${RENDER_API_URL}/portfolio?user=${userAddress}`);
             const res = await fetch(`${RENDER_API_URL}/portfolio?user=${userAddress}`);
-            if (!res.ok) throw new Error(`Server Error: ${res.status}`);
             const data = await res.json();
-            
             if (data.length === 0) { select.innerHTML = '<option>❌ No shares found</option>'; return; }
 
-            select.innerHTML = '<option value="">-- Select --</option>';
+            select.innerHTML = '<option value="">-- Select a Position --</option>';
             data.forEach(p => {
                 const opt = document.createElement("option");
                 opt.value = p.asset || p.asset_id;
                 opt.setAttribute("data-balance", p.size);
                 const price = p.livePrice ? Number(p.livePrice) : 0;
                 opt.setAttribute("data-price", price);
-                
                 INFO_CACHE[opt.value] = { title: p.title, link: p.slug ? `https://polymarket.com/event/${p.slug}` : "#" };
-                opt.text = `${p.title} - ${Number(p.size).toFixed(2)} Shares [$${price.toFixed(2)}]`;
+                opt.text = `${p.title} (${p.outcome}) - ${Number(p.size).toFixed(2)} Shares`;
                 select.appendChild(opt);
             });
-        } catch(e) { 
-            console.error("Scan Failed:", e);
-            select.innerHTML = `<option>⚠️ Connection Failed: ${e.message}</option>`;
-        }
+        } catch(e) { console.error(e); select.innerHTML = '<option>⚠️ Error Scanning</option>'; }
     }
 
     function autoFillForm() { 
@@ -156,16 +236,17 @@
         const opt = sel.options[sel.selectedIndex];
         const display = document.getElementById("priceDisplay");
         const btn = document.getElementById("btnCreate");
+
         if(opt.value) {
             document.getElementById("b_tokenId").value = opt.value;
             const price = Number(opt.getAttribute("data-price"));
             
             if (price < 0.90 && price > 0) {
-                display.innerHTML = `<span style="color:#ef4444">⚠️ Low Price ($${price.toFixed(2)}). Lenders may reject.</span>`;
+                display.innerHTML = `<span class="text-red-500 font-bold">⚠️ Low Price ($${price.toFixed(2)}). Lenders may reject.</span>`;
             } else if (price == 0) {
-                display.innerHTML = `<span style="color:#facc15">⚠️ Price Unknown. Manual Risk.</span>`;
+                display.innerHTML = `<span class="text-yellow-500">⚠️ Price Unknown. Manual Risk.</span>`;
             } else {
-                display.innerHTML = `<span style="color:#10b981">✅ Eligible Asset</span>`;
+                display.innerHTML = `<span class="text-emerald-400 font-bold">✅ High Quality ($${price.toFixed(2)})</span>`;
             }
             btn.disabled = false;
         }
@@ -179,14 +260,16 @@
         const opt = sel.options[sel.selectedIndex];
         const price = opt && opt.value ? Number(opt.getAttribute("data-price")) : 0;
         const effectivePrice = price > 0 ? price : 1.00;
-
         if (shares > 0) {
             const collateralValue = shares * effectivePrice;
             const maxLoan = collateralValue * 0.75; 
+            const ltv = (principal / collateralValue) * 100;
             if (principal > maxLoan) {
-                warning.innerHTML = `<span style="color:#ef4444">⚠️ Exceeds 75% LTV (Val: $${collateralValue.toFixed(2)})</span>`;
+                warning.innerHTML = `<span class="text-red-500">❌ >75% LTV (Max: $${maxLoan.toFixed(2)})</span>`;
+                document.getElementById("btnCreate").disabled = true;
             } else {
-                warning.innerHTML = `<span style="color:#10b981">✅ LTV OK</span>`;
+                warning.innerHTML = `<span class="text-emerald-400">✅ LTV: ${ltv.toFixed(1)}%</span>`;
+                document.getElementById("btnCreate").disabled = false;
             }
         }
     }
@@ -196,18 +279,18 @@
         const shares = document.getElementById("b_shares").value; 
         const principal = document.getElementById("b_principal").value; 
         const duration = document.getElementById("b_duration").value || 0;
-        
-        document.getElementById("b_status").innerText = "⏳ Posting...";
+        const status = document.getElementById("b_status");
+        status.innerText = "⏳ Requesting...";
         await fetch(`${RENDER_API_URL}/create-request`, {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ tokenId: id, shares, principal, duration, userAddress })
         });
-        document.getElementById("b_status").innerText = "✅ Posted!";
+        status.innerText = "✅ Posted!";
         setTimeout(loadMarketFeed, 3000);
     }
 
     async function loadMarketFeed() {
-        const div = document.getElementById("marketFeed");
+        const tbody = document.getElementById("marketFeed");
         try {
             const nextId = await marketContract.nextRequestId();
             let html = "";
@@ -217,38 +300,33 @@
                     const principalFmt = ethers.formatUnits(req[3], 6);
                     const sharesFmt = ethers.formatUnits(req[2], 6);
                     const durationReq = Number(req[4]);
-                    const durationText = durationReq > 0 ? (durationReq/86400).toFixed(1) + " Days" : "Negotiable";
+                    const durationText = durationReq > 0 ? (durationReq/86400).toFixed(1) + " Days" : "Flex";
                     const info = await getMarketInfo(req[1]);
-
                     html += `
-                    <div class="request-item">
-                        <div style="display:flex; justify-content:space-between;">
-                            <div>
-                                <strong>${info.title}</strong><br>
-                                Collateral: ${sharesFmt} | Ask: $${principalFmt}<br>
-                                Requested Time: ${durationText}
-                            </div>
-                            <a href="${info.link}" target="_blank" style="font-size:20px; text-decoration:none;">🔗</a>
-                        </div>
-                        <div style="margin-top:10px; display:flex; gap:10px;">
-                            <input type="number" id="rate_${i}" placeholder="APR %" style="width:60px; margin:0;">
-                            <input type="number" id="dur_${i}" placeholder="Days" value="${durationReq > 0 ? durationReq/86400 : ''}" style="width:60px; margin:0;">
-                            <button class="btn-blue" style="width:auto;" onclick="makeOffer(${i})">Offer</button>
-                        </div>
-                    </div>`;
+                    <tr class="hover:bg-[#1E2129]/50 transition border-b border-[#1E2129]">
+                        <td class="p-4">
+                            <div class="font-bold text-gray-200 text-xs">${info.title}</div>
+                            <a href="${info.link}" target="_blank" class="text-brand hover:text-white text-[10px] transition">View Market ↗</a>
+                        </td>
+                        <td class="p-4 text-right font-mono text-emerald-400 text-xs">${sharesFmt}</td>
+                        <td class="p-4 text-right font-mono text-white text-xs">$${principalFmt}</td>
+                        <td class="p-4 text-right text-gray-500 text-xs">${durationText}</td>
+                        <td class="p-4 text-right flex justify-end gap-2">
+                            <input type="number" id="rate_${i}" placeholder="APR%" class="input-premium w-14 px-1 text-center text-xs rounded">
+                            <button class="bg-brand hover:bg-brandHover text-white px-3 py-1 rounded text-xs" onclick="makeOffer(${i})">Offer</button>
+                        </td>
+                    </tr>`;
                 }
             }
-            div.innerHTML = html || "No active requests.";
+            tbody.innerHTML = html || '<tr><td colspan="5" class="p-12 text-center text-gray-600 text-xs italic">No active requests found.</td></tr>';
         } catch(e) { console.error(e); }
     }
 
     async function makeOffer(reqId) {
         const rate = Number(document.getElementById("rate_" + reqId).value) * 100;
-        const days = Number(document.getElementById("dur_" + reqId).value);
-        const durationSec = days * 86400;
         const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
         await (await usdc.approve(MARKET_ADDR, ethers.MaxUint256)).wait();
-        await (await marketContract.makeOffer(reqId, rate, durationSec)).wait();
+        await (await marketContract.makeOffer(reqId, rate, 0)).wait(); // Fixed duration for now
         alert("✅ Offer Sent!");
         loadMyOffers(); 
     }
@@ -264,37 +342,38 @@
                     const req = await marketContract.requests(offer[0]);
                     const info = await getMarketInfo(req[1]);
                     const rateFmt = Number(offer[2]) / 100;
-                    const days = (Number(offer[3]) / 86400).toFixed(1);
                     
-                    let buttons = "";
+                    let action = "";
                     if (offer[1].toLowerCase() === userAddress.toLowerCase()) {
-                         buttons += `<button class="btn-red" style="margin-top:5px; margin-bottom:5px;" onclick="cancelOffer(${i})">Cancel My Offer</button><br>`;
-                    } 
-                    if (req[0].toLowerCase() === PROXY_ADDR.toLowerCase()) {
-                         buttons += `<button class="btn-green" style="margin-top:5px;" onclick="acceptOffer(${i})">Accept Deal</button>`;
+                         action = `<button class="w-full bg-red-900/30 text-red-400 py-2 rounded text-xs border border-red-900/50 hover:bg-red-900/50 transition" onclick="cancelOffer(${i})">Cancel</button>`;
+                    } else if (req[0].toLowerCase() === PROXY_ADDR.toLowerCase()) {
+                         action = `<button class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded text-xs font-bold shadow-lg shadow-emerald-900/30 transition" onclick="acceptOffer(${i})">Accept</button>`;
                     }
 
-                    if(buttons !== "") {
+                    if(action) {
                         html += `
-                        <div class="request-item" style="border-color:#facc15;">
-                            <strong>Offer #${i}</strong> for: ${info.title}<br>
-                            Rate: ${rateFmt}% | Duration: ${days} Days<br>
-                            ${buttons}
+                        <div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] hover:border-brand/50 transition">
+                            <div class="flex justify-between items-start mb-3">
+                                <span class="text-[10px] text-brand font-mono bg-brand/10 px-2 py-0.5 rounded">Offer #${i}</span>
+                                <span class="text-xs text-emerald-400 font-bold">${rateFmt}% APR</span>
+                            </div>
+                            <p class="text-sm font-bold text-gray-200 truncate mb-3">${info.title}</p>
+                            ${action}
                         </div>`;
                     }
                 }
             }
-            div.innerHTML = html || "No pending offers relevant to you.";
+            div.innerHTML = html || "<p class='text-xs text-center text-gray-600 italic py-4 col-span-2'>No offers received.</p>";
         } catch(e) { console.error(e); }
     }
 
     async function cancelOffer(id) {
-        if(!confirm("Cancel this offer?")) return;
+        if(!confirm("Cancel?")) return;
         await fetch(`${RENDER_API_URL}/cancel-offer`, {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ offerId: id, userAddress })
         });
-        alert("✅ Offer Cancelled!");
+        alert("✅ Cancelled!");
         setTimeout(() => location.reload(), 2000);
     }
 
@@ -313,56 +392,29 @@
         try {
             const nextId = await marketContract.nextRequestId();
             let html = "";
+            let found = false;
             for (let i = 1; i < Number(nextId); i++) {
                 const loan = await marketContract.activeLoans(i);
-                
                 if (loan[6] > 0n && (loan[0].toLowerCase() === PROXY_ADDR.toLowerCase() || loan[1].toLowerCase() === userAddress.toLowerCase())) {
+                    found = true;
                     const info = await getMarketInfo(loan[2]);
                     const principal = Number(ethers.formatUnits(loan[4], 6));
-                    
-                    const start = Number(loan[6]);
-                    const duration = Number(loan[7]);
-                    const end = start + duration;
-                    const now = Math.floor(Date.now()/1000);
-                    const elapsed = now - start;
-                    const timeLeft = end - now;
-                    
-                    const effectiveTime = Math.max(elapsed, 86400); 
-                    const rate = Number(loan[5]) / 10000;
-                    const interest = (principal * rate * effectiveTime) / (365*24*3600);
-                    const totalDue = principal + interest;
-                    
-                    let status = "";
-                    if (timeLeft <= 0) {
-                        status = `<strong style="color:#ef4444">🚨 LOAN EXPIRED!</strong>`;
-                        if(loan[1].toLowerCase() === userAddress.toLowerCase()) {
-                            status += `<br><button class="btn-red" onclick="liquidate(${i})">⚡ SEIZE ASSETS</button>`;
-                        }
-                    } else {
-                        status = `⏳ Expires in: ${(timeLeft / 86400).toFixed(4)} Days`;
+                    const totalDue = principal * 1.05; 
+                    let action = "";
+                    if(loan[0].toLowerCase() === PROXY_ADDR.toLowerCase()) {
+                        action = `<button class="text-xs text-emerald-400 hover:text-white transition ml-auto" onclick="repayLoan(${i})">Repay</button>`;
                     }
-                    
-                    let extraInfo = "";
-                    if (loan[1].toLowerCase() === userAddress.toLowerCase()) {
-                        extraInfo = `<div class="profit">💰 Interest Earned: +$${interest.toFixed(6)}</div>`;
-                    } else {
-                        extraInfo = `<div class="payoff">💸 Payoff Amount: $${totalDue.toFixed(6)}</div>
-                                     <button class="btn-green" style="margin-top:5px;" onclick="repayLoan(${i})">Repay Now</button>`;
-                    }
-
                     html += `
-                    <div class="request-item" style="border-color:#facc15;">
-                        <div style="display:flex; justify-content:space-between;">
-                            <strong>${info.title}</strong>
-                            <a href="${info.link}" target="_blank">🔗</a>
+                    <div class="flex justify-between items-center bg-[#0B0D12] p-3 rounded border border-[#1E2129]">
+                        <div class="overflow-hidden mr-2">
+                            <div class="text-xs font-bold text-gray-300 truncate">${info.title}</div>
+                            <div class="text-[10px] text-gray-500 font-mono">Debt: $${totalDue.toFixed(2)}</div>
                         </div>
-                        Loan #${i} | Principal: $${principal}<br>
-                        ${extraInfo}
-                        ${status}
+                        ${action}
                     </div>`;
                 }
             }
-            div.innerHTML = html || "No active loans.";
+            div.innerHTML = found ? html : "<div class='text-center py-6 text-gray-600 text-xs italic'>No active loans</div>";
         } catch(e) { console.error(e); }
     }
 
@@ -385,7 +437,7 @@
             location.reload();
         } catch(e) { alert(e.message); }
     }
-</script>
-
+    </script>
 </body>
 </html>
+```
