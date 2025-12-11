@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PolyLend Market</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <style>
+        body { font-family: monospace; background: #0f172a; color: #fff; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .card { background: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #334155; margin-bottom: 20px; }
+        h2 { border-bottom: 1px solid #475569; padding-bottom: 10px; margin-top: 0; }
+        input, select { background: #0f172a; border: 1px solid #334155; color: white; padding: 8px; width: 100%; margin-bottom: 10px; box-sizing: border-box; }
+        button { cursor: pointer; padding: 8px 16px; border-radius: 5px; border: none; font-weight: bold; width: 100%; }
+        .btn-green { background: #10b981; color: white; }
+        .btn-blue { background: #3b82f6; color: white; }
+        .btn-red { background: #ef4444; color: white; }
+        .request-item { background: #0f172a; padding: 15px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #475569; }
+        .tag { font-size: 10px; padding: 2px 5px; border-radius: 3px; background: #334155; }
+        .profit { color: #10b981; font-weight: bold; }
+        .payoff { color: #facc15; font-weight: bold; }
+        .warning { font-size: 12px; margin-top: -5px; margin-bottom: 10px; display: block; font-weight: bold; }
+        a { color: #3b82f6; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>PolyLend Market 📊</h1>
+    <button onclick="connectWallet()" class="btn-blue" id="btnConnect">Connect Wallet</button>
+    <div id="userAddr" style="margin-bottom: 20px; color: #94a3b8;"></div>
+
+    <div class="card">
+        <h2>📝 Create Loan Request</h2>
+        <label>Select Position:</label>
+        <select id="positionSelect" onchange="autoFillForm()">
+            <option>-- Connect Wallet First --</option>
+        </select>
+        <div id="priceDisplay" class="warning"></div>
+        <input type="text" id="b_tokenId" readonly style="background: #334155; color: #94a3b8; font-size:10px;">
+        <label>Shares to Lock:</label>
+        <input type="number" id="b_shares" placeholder="0" oninput="checkLTV()">
+        <label>Principal (USDC):</label>
+        <input type="number" id="b_principal" placeholder="0.5" oninput="checkLTV()">
+        <span id="ltvWarning" class="warning"></span>
+        <label>Duration (Days): <span style="font-size:10px; color:#94a3b8;">(0 = Negotiable)</span></label>
+        <input type="number" id="b_duration" placeholder="0" value="0">
+        <button onclick="createRequest()" class="btn-green" id="btnCreate" disabled>Post Request</button>
+        <div id="b_status" style="margin-top:10px; color:#facc15;"></div>
+    </div>
+
+    <div class="card">
+        <h2>🌎 Open Requests</h2>
+        <button onclick="loadMarketFeed()" style="width:auto; margin-bottom:10px; font-size:12px;">🔄 Refresh Feed</button>
+        <div id="marketFeed">Loading...</div>
+    </div>
+
+    <div class="card">
+        <h2>📩 Offers</h2>
+        <button onclick="loadMyOffers()" style="width:auto; margin-bottom:10px; font-size:12px;">🔄 Check Offers</button>
+        <div id="myOffers">No offers.</div>
+    </div>
+
+    <div class="card" style="border-color: #facc15;">
+        <h2>💸 My Active Loans (Live Interest)</h2>
+        <button onclick="loadActiveLoans()" style="width:auto; margin-bottom:10px; font-size:12px;">🔄 Refresh</button>
+        <div id="activeLoans">Loading...</div>
+    </div>
+</div>
+
+<script>
+    // ✅ NEW MARKET ADDRESS
+    const MARKET_ADDR = "0xf8bF64E5c8f42002119B8Dbf516a9c5eD06cc2e5"; 
+    const USDC_ADDR = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"; 
+    const PROXY_ADDR = "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7"; 
+
+    // ✅ LIVE RENDER API
+    const RENDER_API_URL = "https://polyloans-api.onrender.com"; 
+
+    let signer, userAddress, marketContract;
+    const TOKEN_TITLES = {}; 
+    const INFO_CACHE = {}; 
+
+    const MARKET_ABI = [
+        "function makeOffer(uint256, uint256, uint256) external returns (uint256)",
+        "function cancelOffer(uint256) external",
+        "function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool)",
+        "function offers(uint256) view returns (uint256, address, uint256, uint256, bool)",
+        "function activeLoans(uint256) view returns (address, address, uint256, uint256, uint256, uint256, uint256, uint256)",
+        "function nextRequestId() view returns (uint256)",
+        "function nextOfferId() view returns (uint256)",
+        "function liquidateByTime(uint256) external"
+    ];
+    const USDC_ABI = ["function approve(address, uint256) external"];
+
+    async function connectWallet() {
+        if (!window.ethereum) return alert("Install Rabby!");
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        signer = await provider.getSigner();
+        userAddress = await signer.getAddress();
+        marketContract = new ethers.Contract(MARKET_ADDR, MARKET_ABI, signer);
+        
+        document.getElementById("userAddr").innerText = "Connected: " + userAddress;
+        document.getElementById("btnConnect").style.display = "none";
+        
+        scanPortfolio();
+        loadMarketFeed(); 
+        loadMyOffers();
+        loadActiveLoans();
+        setInterval(loadActiveLoans, 1000); 
+    }
+
+    // --- HELPER: GET INFO (Uses Render) ---
+    async function getMarketInfo(tokenId) {
+        if(INFO_CACHE[tokenId]) return INFO_CACHE[tokenId];
+        try {
+            const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${tokenId}`);
+            const data = await res.json();
+            const info = { title: data.title || "Unknown Market", link: data.slug ? `https://polymarket.com/event/${data.slug}` : "#" };
+            INFO_CACHE[tokenId] = info;
+            return info;
+        } catch(e) { return { title: "Error Fetching", link: "#" }; }
+    }
+
+    // --- 1. SCAN (Uses Render) ---
+    async function scanPortfolio() {
+        const select = document.getElementById("positionSelect");
+        select.innerHTML = '<option>🔍 Scanning...</option>';
+        try {
+            console.log("Fetching from:", `${RENDER_API_URL}/portfolio?user=${userAddress}`);
+            const res = await fetch(`${RENDER_API_URL}/portfolio?user=${userAddress}`);
+            if (!res.ok) throw new Error(`Server Error: ${res.status}`);
+            const data = await res.json();
+            
+            if (data.length === 0) { select.innerHTML = '<option>❌ No shares found</option>'; return; }
+
+            select.innerHTML = '<option value="">-- Select --</option>';
+            data.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p.asset || p.asset_id;
+                opt.setAttribute("data-balance", p.size);
+                const price = p.livePrice ? Number(p.livePrice) : 0;
+                opt.setAttribute("data-price", price);
+                
+                INFO_CACHE[opt.value] = { title: p.title, link: p.slug ? `https://polymarket.com/event/${p.slug}` : "#" };
+                opt.text = `${p.title} - ${Number(p.size).toFixed(2)} Shares [$${price.toFixed(2)}]`;
+                select.appendChild(opt);
+            });
+        } catch(e) { 
+            console.error("Scan Failed:", e);
+            select.innerHTML = `<option>⚠️ Connection Failed: ${e.message}</option>`;
+        }
+    }
+
+    function autoFillForm() { 
+        const sel = document.getElementById("positionSelect");
+        const opt = sel.options[sel.selectedIndex];
+        const display = document.getElementById("priceDisplay");
+        const btn = document.getElementById("btnCreate");
+        if(opt.value) {
+            document.getElementById("b_tokenId").value = opt.value;
+            const price = Number(opt.getAttribute("data-price"));
+            
+            if (price < 0.90 && price > 0) {
+                display.innerHTML = `<span style="color:#ef4444">⚠️ Low Price ($${price.toFixed(2)}). Lenders may reject.</span>`;
+            } else if (price == 0) {
+                display.innerHTML = `<span style="color:#facc15">⚠️ Price Unknown. Manual Risk.</span>`;
+            } else {
+                display.innerHTML = `<span style="color:#10b981">✅ Eligible Asset</span>`;
+            }
+            btn.disabled = false;
+        }
+    }
+
+    function checkLTV() {
+        const shares = Number(document.getElementById("b_shares").value);
+        const principal = Number(document.getElementById("b_principal").value);
+        const warning = document.getElementById("ltvWarning");
+        const sel = document.getElementById("positionSelect");
+        const opt = sel.options[sel.selectedIndex];
+        const price = opt && opt.value ? Number(opt.getAttribute("data-price")) : 0;
+        const effectivePrice = price > 0 ? price : 1.00;
+
+        if (shares > 0) {
+            const collateralValue = shares * effectivePrice;
+            const maxLoan = collateralValue * 0.75; 
+            if (principal > maxLoan) {
+                warning.innerHTML = `<span style="color:#ef4444">⚠️ Exceeds 75% LTV (Val: $${collateralValue.toFixed(2)})</span>`;
+            } else {
+                warning.innerHTML = `<span style="color:#10b981">✅ LTV OK</span>`;
+            }
+        }
+    }
+
+    async function createRequest() {
+        const id = document.getElementById("b_tokenId").value;
+        const shares = document.getElementById("b_shares").value; 
+        const principal = document.getElementById("b_principal").value; 
+        const duration = document.getElementById("b_duration").value || 0;
+        
+        document.getElementById("b_status").innerText = "⏳ Posting...";
+        await fetch(`${RENDER_API_URL}/create-request`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ tokenId: id, shares, principal, duration, userAddress })
+        });
+        document.getElementById("b_status").innerText = "✅ Posted!";
+        setTimeout(loadMarketFeed, 3000);
+    }
+
+    async function loadMarketFeed() {
+        const div = document.getElementById("marketFeed");
+        try {
+            const nextId = await marketContract.nextRequestId();
+            let html = "";
+            for (let i = Number(nextId) - 1; i >= 1; i--) {
+                const req = await marketContract.requests(i);
+                if (req[5] === true) {
+                    const principalFmt = ethers.formatUnits(req[3], 6);
+                    const sharesFmt = ethers.formatUnits(req[2], 6);
+                    const durationReq = Number(req[4]);
+                    const durationText = durationReq > 0 ? (durationReq/86400).toFixed(1) + " Days" : "Negotiable";
+                    const info = await getMarketInfo(req[1]);
+
+                    html += `
+                    <div class="request-item">
+                        <div style="display:flex; justify-content:space-between;">
+                            <div>
+                                <strong>${info.title}</strong><br>
+                                Collateral: ${sharesFmt} | Ask: $${principalFmt}<br>
+                                Requested Time: ${durationText}
+                            </div>
+                            <a href="${info.link}" target="_blank" style="font-size:20px; text-decoration:none;">🔗</a>
+                        </div>
+                        <div style="margin-top:10px; display:flex; gap:10px;">
+                            <input type="number" id="rate_${i}" placeholder="APR %" style="width:60px; margin:0;">
+                            <input type="number" id="dur_${i}" placeholder="Days" value="${durationReq > 0 ? durationReq/86400 : ''}" style="width:60px; margin:0;">
+                            <button class="btn-blue" style="width:auto;" onclick="makeOffer(${i})">Offer</button>
+                        </div>
+                    </div>`;
+                }
+            }
+            div.innerHTML = html || "No active requests.";
+        } catch(e) { console.error(e); }
+    }
+
+    async function makeOffer(reqId) {
+        const rate = Number(document.getElementById("rate_" + reqId).value) * 100;
+        const days = Number(document.getElementById("dur_" + reqId).value);
+        const durationSec = days * 86400;
+        const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+        await (await usdc.approve(MARKET_ADDR, ethers.MaxUint256)).wait();
+        await (await marketContract.makeOffer(reqId, rate, durationSec)).wait();
+        alert("✅ Offer Sent!");
+        loadMyOffers(); 
+    }
+
+    async function loadMyOffers() {
+        const div = document.getElementById("myOffers");
+        try {
+            const nextId = await marketContract.nextOfferId();
+            let html = "";
+            for (let i = Number(nextId) - 1; i >= 1; i--) {
+                const offer = await marketContract.offers(i);
+                if (offer[4] === true) {
+                    const req = await marketContract.requests(offer[0]);
+                    const info = await getMarketInfo(req[1]);
+                    const rateFmt = Number(offer[2]) / 100;
+                    const days = (Number(offer[3]) / 86400).toFixed(1);
+                    
+                    let buttons = "";
+                    if (offer[1].toLowerCase() === userAddress.toLowerCase()) {
+                         buttons += `<button class="btn-red" style="margin-top:5px; margin-bottom:5px;" onclick="cancelOffer(${i})">Cancel My Offer</button><br>`;
+                    } 
+                    if (req[0].toLowerCase() === PROXY_ADDR.toLowerCase()) {
+                         buttons += `<button class="btn-green" style="margin-top:5px;" onclick="acceptOffer(${i})">Accept Deal</button>`;
+                    }
+
+                    if(buttons !== "") {
+                        html += `
+                        <div class="request-item" style="border-color:#facc15;">
+                            <strong>Offer #${i}</strong> for: ${info.title}<br>
+                            Rate: ${rateFmt}% | Duration: ${days} Days<br>
+                            ${buttons}
+                        </div>`;
+                    }
+                }
+            }
+            div.innerHTML = html || "No pending offers relevant to you.";
+        } catch(e) { console.error(e); }
+    }
+
+    async function cancelOffer(id) {
+        if(!confirm("Cancel this offer?")) return;
+        await fetch(`${RENDER_API_URL}/cancel-offer`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ offerId: id, userAddress })
+        });
+        alert("✅ Offer Cancelled!");
+        setTimeout(() => location.reload(), 2000);
+    }
+
+    async function acceptOffer(offerId) {
+        if(!confirm("Accept deal?")) return;
+        await fetch(`${RENDER_API_URL}/accept-offer`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ offerId, userAddress })
+        });
+        alert("✅ Accepted!");
+        setTimeout(() => location.reload(), 2000);
+    }
+
+    async function loadActiveLoans() {
+        const div = document.getElementById("activeLoans");
+        try {
+            const nextId = await marketContract.nextRequestId();
+            let html = "";
+            for (let i = 1; i < Number(nextId); i++) {
+                const loan = await marketContract.activeLoans(i);
+                
+                if (loan[6] > 0n && (loan[0].toLowerCase() === PROXY_ADDR.toLowerCase() || loan[1].toLowerCase() === userAddress.toLowerCase())) {
+                    const info = await getMarketInfo(loan[2]);
+                    const principal = Number(ethers.formatUnits(loan[4], 6));
+                    
+                    const start = Number(loan[6]);
+                    const duration = Number(loan[7]);
+                    const end = start + duration;
+                    const now = Math.floor(Date.now()/1000);
+                    const elapsed = now - start;
+                    const timeLeft = end - now;
+                    
+                    const effectiveTime = Math.max(elapsed, 86400); 
+                    const rate = Number(loan[5]) / 10000;
+                    const interest = (principal * rate * effectiveTime) / (365*24*3600);
+                    const totalDue = principal + interest;
+                    
+                    let status = "";
+                    if (timeLeft <= 0) {
+                        status = `<strong style="color:#ef4444">🚨 LOAN EXPIRED!</strong>`;
+                        if(loan[1].toLowerCase() === userAddress.toLowerCase()) {
+                            status += `<br><button class="btn-red" onclick="liquidate(${i})">⚡ SEIZE ASSETS</button>`;
+                        }
+                    } else {
+                        status = `⏳ Expires in: ${(timeLeft / 86400).toFixed(4)} Days`;
+                    }
+                    
+                    let extraInfo = "";
+                    if (loan[1].toLowerCase() === userAddress.toLowerCase()) {
+                        extraInfo = `<div class="profit">💰 Interest Earned: +$${interest.toFixed(6)}</div>`;
+                    } else {
+                        extraInfo = `<div class="payoff">💸 Payoff Amount: $${totalDue.toFixed(6)}</div>
+                                     <button class="btn-green" style="margin-top:5px;" onclick="repayLoan(${i})">Repay Now</button>`;
+                    }
+
+                    html += `
+                    <div class="request-item" style="border-color:#facc15;">
+                        <div style="display:flex; justify-content:space-between;">
+                            <strong>${info.title}</strong>
+                            <a href="${info.link}" target="_blank">🔗</a>
+                        </div>
+                        Loan #${i} | Principal: $${principal}<br>
+                        ${extraInfo}
+                        ${status}
+                    </div>`;
+                }
+            }
+            div.innerHTML = html || "No active loans.";
+        } catch(e) { console.error(e); }
+    }
+
+    async function repayLoan(id) {
+        if(!confirm(`Repay Loan #${id}?`)) return;
+        await fetch(`${RENDER_API_URL}/repay-loan`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ requestId: id, userAddress })
+        });
+        alert("✅ Repaid!");
+        location.reload();
+    }
+    
+    async function liquidate(id) {
+        if(!confirm("Seize collateral?")) return;
+        try {
+            const tx = await marketContract.liquidateByTime(id);
+            await tx.wait();
+            alert("⚡ ASSETS SEIZED!");
+            location.reload();
+        } catch(e) { alert(e.message); }
+    }
+</script>
+
+</body>
+</html>
