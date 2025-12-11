@@ -68,11 +68,13 @@
 </div>
 
 <script>
-    // ⬇️ UPDATE THIS ADDRESS
-    const MARKET_ADDR = "0xE136a065353bCadA85954dc79b953f2CA2d28b57"; 
+    // ✅ NEW MARKET ADDRESS
+    const MARKET_ADDR = "0xf8bF64E5c8f42002119B8Dbf516a9c5eD06cc2e5"; 
     const USDC_ADDR = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"; 
-    // This is hardcoded for demo, but ideally fetched from server if multi-user
     const PROXY_ADDR = "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7"; 
+
+    // ✅ LIVE RENDER API
+    const RENDER_API_URL = "https://polyloans-api.onrender.com"; 
 
     let signer, userAddress, marketContract;
     const TOKEN_TITLES = {}; 
@@ -104,14 +106,14 @@
         loadMarketFeed(); 
         loadMyOffers();
         loadActiveLoans();
-        setInterval(loadActiveLoans, 1000); // 1s refresh
+        setInterval(loadActiveLoans, 1000); 
     }
 
-    // --- HELPER: GET INFO ---
+    // --- HELPER: GET INFO (Uses Render) ---
     async function getMarketInfo(tokenId) {
         if(INFO_CACHE[tokenId]) return INFO_CACHE[tokenId];
         try {
-            const res = await fetch(`http://localhost:3000/market-info?tokenId=${tokenId}`);
+            const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${tokenId}`);
             const data = await res.json();
             const info = { title: data.title || "Unknown Market", link: data.slug ? `https://polymarket.com/event/${data.slug}` : "#" };
             INFO_CACHE[tokenId] = info;
@@ -119,15 +121,17 @@
         } catch(e) { return { title: "Error Fetching", link: "#" }; }
     }
 
-    // --- 1. SCAN ---
+    // --- 1. SCAN (Uses Render) ---
     async function scanPortfolio() {
         const select = document.getElementById("positionSelect");
         select.innerHTML = '<option>🔍 Scanning...</option>';
         try {
-            const res = await fetch(`http://localhost:3000/portfolio?user=${userAddress}`);
+            console.log("Fetching from:", `${RENDER_API_URL}/portfolio?user=${userAddress}`);
+            const res = await fetch(`${RENDER_API_URL}/portfolio?user=${userAddress}`);
+            if (!res.ok) throw new Error(`Server Error: ${res.status}`);
             const data = await res.json();
             
-            if (data.length === 0) { select.innerHTML = '<option>❌ No shares</option>'; return; }
+            if (data.length === 0) { select.innerHTML = '<option>❌ No shares found</option>'; return; }
 
             select.innerHTML = '<option value="">-- Select --</option>';
             data.forEach(p => {
@@ -141,7 +145,10 @@
                 opt.text = `${p.title} - ${Number(p.size).toFixed(2)} Shares [$${price.toFixed(2)}]`;
                 select.appendChild(opt);
             });
-        } catch(e) { console.error(e); }
+        } catch(e) { 
+            console.error("Scan Failed:", e);
+            select.innerHTML = `<option>⚠️ Connection Failed: ${e.message}</option>`;
+        }
     }
 
     function autoFillForm() { 
@@ -153,7 +160,6 @@
             document.getElementById("b_tokenId").value = opt.value;
             const price = Number(opt.getAttribute("data-price"));
             
-            // Soft Warning Logic
             if (price < 0.90 && price > 0) {
                 display.innerHTML = `<span style="color:#ef4444">⚠️ Low Price ($${price.toFixed(2)}). Lenders may reject.</span>`;
             } else if (price == 0) {
@@ -161,7 +167,7 @@
             } else {
                 display.innerHTML = `<span style="color:#10b981">✅ Eligible Asset</span>`;
             }
-            btn.disabled = false; // Never block, just warn
+            btn.disabled = false;
         }
     }
 
@@ -192,7 +198,7 @@
         const duration = document.getElementById("b_duration").value || 0;
         
         document.getElementById("b_status").innerText = "⏳ Posting...";
-        await fetch('http://localhost:3000/create-request', {
+        await fetch(`${RENDER_API_URL}/create-request`, {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ tokenId: id, shares, principal, duration, userAddress })
         });
@@ -200,7 +206,6 @@
         setTimeout(loadMarketFeed, 3000);
     }
 
-    // --- 2. FEED ---
     async function loadMarketFeed() {
         const div = document.getElementById("marketFeed");
         try {
@@ -248,7 +253,6 @@
         loadMyOffers(); 
     }
 
-    // --- 3. OFFERS (Fixed for Self-Lending) ---
     async function loadMyOffers() {
         const div = document.getElementById("myOffers");
         try {
@@ -263,19 +267,13 @@
                     const days = (Number(offer[3]) / 86400).toFixed(1);
                     
                     let buttons = "";
-                    
-                    // 1. IF I AM LENDER -> Show Cancel
                     if (offer[1].toLowerCase() === userAddress.toLowerCase()) {
                          buttons += `<button class="btn-red" style="margin-top:5px; margin-bottom:5px;" onclick="cancelOffer(${i})">Cancel My Offer</button><br>`;
                     } 
-                    
-                    // 2. IF I AM BORROWER (My Proxy) -> Show Accept
-                    // We removed 'else' so you can see both if testing yourself
                     if (req[0].toLowerCase() === PROXY_ADDR.toLowerCase()) {
                          buttons += `<button class="btn-green" style="margin-top:5px;" onclick="acceptOffer(${i})">Accept Deal</button>`;
                     }
 
-                    // Only show the offer card if I have at least one action (Lender or Borrower)
                     if(buttons !== "") {
                         html += `
                         <div class="request-item" style="border-color:#facc15;">
@@ -292,17 +290,17 @@
 
     async function cancelOffer(id) {
         if(!confirm("Cancel this offer?")) return;
-        try {
-            const tx = await marketContract.cancelOffer(id);
-            await tx.wait();
-            alert("✅ Offer Cancelled!");
-            loadMyOffers();
-        } catch(e) { alert(e.message); }
+        await fetch(`${RENDER_API_URL}/cancel-offer`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ offerId: id, userAddress })
+        });
+        alert("✅ Offer Cancelled!");
+        setTimeout(() => location.reload(), 2000);
     }
 
     async function acceptOffer(offerId) {
         if(!confirm("Accept deal?")) return;
-        await fetch('http://localhost:3000/accept-offer', {
+        await fetch(`${RENDER_API_URL}/accept-offer`, {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ offerId, userAddress })
         });
@@ -310,7 +308,6 @@
         setTimeout(() => location.reload(), 2000);
     }
 
-    // --- 4. ACTIVE LOANS ---
     async function loadActiveLoans() {
         const div = document.getElementById("activeLoans");
         try {
@@ -330,7 +327,6 @@
                     const elapsed = now - start;
                     const timeLeft = end - now;
                     
-                    // Calc Interest (Min 1 day)
                     const effectiveTime = Math.max(elapsed, 86400); 
                     const rate = Number(loan[5]) / 10000;
                     const interest = (principal * rate * effectiveTime) / (365*24*3600);
@@ -372,7 +368,7 @@
 
     async function repayLoan(id) {
         if(!confirm(`Repay Loan #${id}?`)) return;
-        await fetch('http://localhost:3000/repay-loan', {
+        await fetch(`${RENDER_API_URL}/repay-loan`, {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ requestId: id, userAddress })
         });
