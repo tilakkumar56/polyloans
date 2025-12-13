@@ -14,8 +14,8 @@
         .panel { background: #0B0D12; border: 1px solid #1E2129; }
         .input-prem { background: #050608; border: 1px solid #1E2129; color: white; }
         .btn-brand { background: #6366F1; color: white; } .btn-brand:hover { background: #4F46E5; }
-        .tab-btn { border-bottom: 2px solid transparent; color: #6B7280; }
-        .tab-active { border-bottom: 2px solid #6366F1; color: white; }
+        .tab-btn { border-bottom: 2px solid transparent; color: #6B7280; width: 100px; text-align: center; }
+        .tab-active { border-bottom: 2px solid #6366F1; color: white; font-weight: bold; }
         .hidden-tab { display: none; }
     </style>
 </head>
@@ -24,43 +24,59 @@
     <nav class="h-16 border-b border-[#1E2129] flex items-center justify-between px-6 bg-[#020408]">
         <div class="flex items-center gap-8">
             <span class="font-bold text-lg text-white">PolyLoans <span class="text-[10px] text-brand bg-brand/10 px-1 rounded">BETA</span></span>
-            <div id="navTabs" class="hidden flex gap-6 text-sm font-medium h-16 items-end pb-4">
+            <div id="navTabs" class="hidden flex gap-2 text-sm font-medium h-16 items-end pb-4">
                 <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active">Overview</button>
-                <button onclick="switchTab('borrower')" id="tab-borrower" class="tab-btn">Borrower</button>
-                <button onclick="switchTab('lender')" id="tab-lender" class="tab-btn">Lender</button>
+                <button onclick="switchTab('borrow')" id="tab-borrow" class="tab-btn">Borrow</button>
+                <button onclick="switchTab('lend')" id="tab-lend" class="tab-btn">Lend</button>
             </div>
         </div>
-        <button id="btnConnect" onclick="connectWallet()" class="btn-brand px-4 py-2 rounded text-sm font-bold">Connect Wallet</button>
-        <div id="userAddr" class="hidden font-mono text-xs text-gray-400"></div>
+
+        <div id="walletBox" class="flex items-center gap-4">
+            <div id="userAddr" class="hidden flex items-center gap-2 bg-[#0B0D12] border border-[#1E2129] px-3 py-1.5 rounded-full">
+                <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span id="addrText" class="font-mono text-xs text-gray-300">0x00...0000</span>
+            </div>
+
+            <button id="btnConnect" onclick="connectWallet()" class="btn-brand px-4 py-2 rounded text-sm font-bold shadow-lg shadow-indigo-500/20">
+                Connect Wallet
+            </button>
+        </div>
     </nav>
 
     <main class="p-6 max-w-7xl mx-auto w-full">
 
         <div id="view-overview" class="space-y-6">
-            <div class="grid grid-cols-3 gap-6">
+            <h2 class="text-xl font-bold text-white mb-4">Dashboard Overview</h2>
+            <div class="grid grid-cols-4 gap-6">
                 <div class="panel p-6 rounded-xl">
-                    <div class="text-gray-500 text-xs uppercase">Total Borrowed</div>
-                    <div class="text-2xl font-bold text-white mt-1" id="statBorrowed">$0.00</div>
+                    <div class="text-gray-500 text-xs uppercase">My Debt (Borrowed)</div>
+                    <div class="text-2xl font-bold text-red-400 mt-1" id="statBorrowed">$0.00</div>
                 </div>
                 <div class="panel p-6 rounded-xl">
-                    <div class="text-gray-500 text-xs uppercase">Active Loans</div>
+                    <div class="text-gray-500 text-xs uppercase">My Investments (Lent)</div>
+                    <div class="text-2xl font-bold text-emerald-400 mt-1" id="statLent">$0.00</div>
+                </div>
+                <div class="panel p-6 rounded-xl">
+                    <div class="text-gray-500 text-xs uppercase">Active Deals</div>
                     <div class="text-2xl font-bold text-white mt-1" id="statCount">0</div>
                 </div>
                 <div class="panel p-6 rounded-xl">
-                    <div class="text-gray-500 text-xs uppercase">Share Balance</div>
+                    <div class="text-gray-500 text-xs uppercase">Wallet Shares</div>
                     <div class="text-2xl font-bold text-brand mt-1" id="statShares">0</div>
                 </div>
             </div>
             
             <div class="panel rounded-xl p-6">
-                <h3 class="font-bold text-white mb-4">My Activity</h3>
+                <h3 class="font-bold text-white mb-4">Recent Activity</h3>
                 <div id="historyList" class="text-sm text-gray-500">Connecting to graph...</div>
             </div>
         </div>
 
-        <div id="view-borrower" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div id="view-borrow" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-4 panel rounded-xl p-6 space-y-4">
-                <h2 class="font-bold text-white">New Loan Request</h2>
+                <h2 class="font-bold text-white flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-brand"></span> New Loan Request
+                </h2>
                 
                 <div>
                     <label class="text-xs text-gray-500 block mb-1">Select Asset</label>
@@ -69,52 +85,73 @@
                 </div>
                 
                 <div class="grid grid-cols-2 gap-4">
-                    <div><label class="text-xs text-gray-500 block mb-1">Shares</label><input type="number" id="b_shares" class="input-prem w-full rounded p-2 text-sm" oninput="checkLTV()"></div>
-                    <div><label class="text-xs text-gray-500 block mb-1">USDC Needed</label><input type="number" id="b_principal" class="input-prem w-full rounded p-2 text-sm" oninput="checkLTV()"></div>
+                    <div><label class="text-xs text-gray-500 block mb-1">Lock Shares</label><input type="number" id="b_shares" class="input-prem w-full rounded p-2 text-sm" oninput="checkLTV()"></div>
+                    <div><label class="text-xs text-gray-500 block mb-1">Get USDC</label><input type="number" id="b_principal" class="input-prem w-full rounded p-2 text-sm" oninput="checkLTV()"></div>
                 </div>
                 
                 <div id="ltvWarning" class="text-xs font-mono text-right h-4"></div>
 
                 <div>
-                    <label class="text-xs text-gray-500 block mb-1">Duration (Minutes for Test)</label>
+                    <label class="text-xs text-gray-500 block mb-1">Duration (Minutes)</label>
                     <input type="number" id="b_duration" class="input-prem w-full rounded p-2 text-sm" placeholder="e.g. 60">
                 </div>
 
-                <button id="btnCreate" onclick="handleCreateRequest()" disabled class="w-full btn-brand py-3 rounded font-bold text-sm">Sign Request</button>
+                <button id="btnCreate" onclick="handleCreateRequest()" disabled class="w-full btn-brand py-3 rounded font-bold text-sm">Sign & Post</button>
             </div>
 
-            <div class="lg:col-span-8 panel rounded-xl p-6">
-                <h2 class="font-bold text-white mb-4">My Active Debts</h2>
-                <div id="borrowerLoans" class="space-y-3"></div>
+            <div class="lg:col-span-8 space-y-6">
+                <div class="panel rounded-xl p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="font-bold text-white">Incoming Offers</h2>
+                        <button onclick="loadMyOffers()" class="text-xs text-brand">Refresh</button>
+                    </div>
+                    <div id="borrowerOffers" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <p class="text-gray-500 text-xs col-span-2">No offers received yet.</p>
+                    </div>
+                </div>
+
+                <div class="panel rounded-xl p-6">
+                    <h2 class="font-bold text-white mb-4">My Active Debts</h2>
+                    <div id="borrowerLoans" class="space-y-3">
+                        <p class="text-gray-500 text-xs">No active debts.</p>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div id="view-lender" class="hidden-tab space-y-6">
+        <div id="view-lend" class="hidden-tab space-y-6">
             <div class="panel rounded-xl overflow-hidden">
                 <div class="p-4 border-b border-[#1E2129] flex justify-between bg-[#050608]">
-                    <h2 class="font-bold text-white">Market Feed</h2>
+                    <h2 class="font-bold text-white flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Market Feed
+                    </h2>
                     <button onclick="loadMarketFeed()" class="text-xs text-brand">Refresh</button>
                 </div>
                 <table class="w-full text-left text-sm text-gray-300">
                     <thead class="bg-[#0B0D12] text-xs uppercase text-gray-500">
-                        <tr><th class="p-4">Market</th><th class="p-4 text-right">Shares</th><th class="p-4 text-right">Ask</th><th class="p-4 text-right">Duration</th><th class="p-4 text-right">Offers</th><th class="p-4 text-right">Action</th></tr>
+                        <tr><th class="p-4">Market</th><th class="p-4 text-right">Collateral</th><th class="p-4 text-right">Ask</th><th class="p-4 text-right">Duration</th><th class="p-4 text-right">Action</th></tr>
                     </thead>
                     <tbody id="marketFeed"></tbody>
                 </table>
+            </div>
+
+            <div class="panel rounded-xl p-6">
+                <h2 class="font-bold text-white mb-4">My Investments</h2>
+                <div id="lenderLoans" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <p class="text-gray-500 text-xs">You haven't funded any loans yet.</p>
+                </div>
             </div>
         </div>
 
     </main>
 
     <script>
-    // ⬇️ UPDATE THIS ADDRESS ⬇️
-    const MARKET_ADDR = "0xE754F567272478B14f4dBc360a0F25B1DFa52dA3"; 
+    const MARKET_ADDR = "0xE754F567272478B14f4dBc360a0F25B1DFa52dA3"; // Confirm this is correct
     const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
     const RENDER_API_URL = "https://polyloans-api.onrender.com"; 
 
     let signer, userAddress, marketContract;
     
-    // Updated ABI
     const MARKET_ABI = [
         "function createRequest(uint256, uint256, uint256, uint256) external returns (uint256)",
         "function cancelRequest(uint256) external",
@@ -127,31 +164,53 @@
         "function buyoutLoan(uint256) external",
         "function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)",
         "function loans(uint256) view returns (address, uint256, uint256, uint256)",
+        "function offers(uint256) view returns (uint256, address, uint256, bool)",
         "function nextRequestId() view returns (uint256)",
-        "function activeLoans(uint256) view returns (address, address, uint256, uint256, uint256, uint256, uint256, uint256)" // Legacy helper if exists, else use mappings
+        "function nextOfferId() view returns (uint256)"
     ];
 
     async function connectWallet() {
-        if (!window.ethereum) return alert("Install Rabby!");
-        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        signer = await provider.getSigner();
-        userAddress = await signer.getAddress();
-        marketContract = new ethers.Contract(MARKET_ADDR, MARKET_ABI, signer);
+        if (!window.ethereum) return alert("Install Rabby or MetaMask!");
         
-        document.getElementById("userAddr").innerText = userAddress.slice(0,6)+"..."+userAddress.slice(-4);
-        document.getElementById("btnConnect").style.display = "none";
-        document.getElementById("navTabs").classList.remove("hidden");
-        
-        switchTab('overview');
-        scanPortfolio();
-        loadMarketFeed();
-        loadMyLoans();
-        setInterval(updateTimers, 1000);
+        try {
+            // 1. Force Polygon
+            await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
+            
+            // 2. Setup Ethers
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            signer = await provider.getSigner();
+            userAddress = await signer.getAddress();
+            marketContract = new ethers.Contract(MARKET_ADDR, MARKET_ABI, signer);
+            
+            // 3. UPDATE UI IMMEDIATELY
+            const shortAddr = userAddress.slice(0,6) + "..." + userAddress.slice(-4);
+            document.getElementById("addrText").innerText = shortAddr;
+            
+            // Hide Button, Show Address
+            document.getElementById("btnConnect").classList.add("hidden");
+            document.getElementById("userAddr").classList.remove("hidden");
+            document.getElementById("userAddr").classList.add("flex"); // Ensure flex display
+
+            // Show Tabs
+            document.getElementById("navTabs").classList.remove("hidden");
+            switchTab('overview');
+
+            // 4. Load Data
+            await initProxy();
+            scanPortfolio();
+            loadMarketFeed();
+            loadMyLoans();
+            loadMyOffers();
+            setInterval(updateTimers, 1000);
+
+        } catch(e) {
+            console.error(e);
+            alert("Connection Failed: " + e.message);
+        }
     }
 
     function switchTab(tab) {
-        ['overview','borrower','lender'].forEach(t => document.getElementById(`view-${t}`).classList.add('hidden-tab'));
+        ['overview','borrow','lend'].forEach(t => document.getElementById(`view-${t}`).classList.add('hidden-tab'));
         document.getElementById(`view-${tab}`).classList.remove('hidden-tab');
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
         document.getElementById(`tab-${tab}`).classList.add('tab-active');
@@ -172,8 +231,7 @@
                 opt.text = `${p.title} (${p.outcome})`;
                 select.appendChild(opt);
             });
-            // Update Overview Stat
-            document.getElementById("statShares").innerText = data.length + " Positions";
+            document.getElementById("statShares").innerText = data.length;
         } catch(e) {}
     }
 
@@ -181,7 +239,7 @@
         const sel = document.getElementById("positionSelect");
         const opt = sel.selectedOptions[0];
         if(opt.value) {
-            document.getElementById("b_tokenId").value = opt.value;
+            // document.getElementById("b_tokenId").value = opt.value; // removed hidden input use
             document.getElementById("balanceDisplay").innerText = `Available: ${opt.getAttribute("data-bal")} Shares`;
         }
     }
@@ -194,12 +252,12 @@
         const btn = document.getElementById("btnCreate");
         
         if (shares > 0) {
-            const val = shares * (price || 0.5); // Fallback price
-            const limit = val * 0.50; // 🔥 50% LTV HARDCODED
+            const val = shares * (price || 0.5); 
+            const limit = val * 0.50; 
             const warning = document.getElementById("ltvWarning");
             
             if (principal > limit) {
-                warning.innerHTML = `<span class="text-red-500">❌ Max Loan: $${limit.toFixed(2)} (50% LTV)</span>`;
+                warning.innerHTML = `<span class="text-red-500">❌ Max: $${limit.toFixed(2)}</span>`;
                 btn.disabled = true;
             } else {
                 warning.innerHTML = `<span class="text-emerald-400">✅ LTV OK</span>`;
@@ -208,7 +266,6 @@
         }
     }
 
-    // --- TRANSACTIONS (Sign & Relay) ---
     async function signAndRelay(func, args) {
         try {
             const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
@@ -225,68 +282,109 @@
             const json = await res.json();
             if(!json.success) throw new Error(json.error);
             return json.txHash;
-        } catch(e) { alert(e.message); return null; }
+        } catch(e) { alert("Signing Error: " + e.message); return null; }
     }
 
     async function handleCreateRequest() {
-        const id = document.getElementById("b_tokenId").value;
+        // Fix: get value directly from select
+        const id = document.getElementById("positionSelect").value; 
         const sh = document.getElementById("b_shares").value;
         const pr = document.getElementById("b_principal").value;
-        const dur = document.getElementById("b_duration").value; // Minutes
-        // Convert Minutes to Seconds for contract
+        const dur = document.getElementById("b_duration").value;
+        
         const tx = await signAndRelay("createRequest", [id, BigInt(sh*1e6), BigInt(pr*1e6), BigInt(dur * 60)]);
-        if(tx) { alert("✅ Request Posted!"); location.reload(); }
+        if(tx) { alert("✅ Posted!"); location.reload(); }
     }
 
     async function loadMarketFeed() {
         const tbody = document.getElementById("marketFeed");
         const nextId = await marketContract.nextRequestId();
         let html = "";
+        
         for(let i=Number(nextId)-1; i>=1; i--) {
             try {
-                const req = await marketContract.requests(i); // borrower, tokenId, shares, principal, duration, isActive, isLoan
-                if(req[5] === true && req[6] === false) { // Active & Not Loan
+                const req = await marketContract.requests(i);
+                const isMine = req[0].toLowerCase() === window.myProxy?.toLowerCase();
+                if(req[5] === true && req[6] === false && !isMine) {
                     const info = await getInfo(req[1]);
-                    const isMine = req[0].toLowerCase() === window.myProxy?.toLowerCase(); // Use proxy check
-                    
-                    let action = "";
-                    if(isMine) action = `<button class="text-red-400 border border-red-900 px-3 py-1 rounded text-xs" onclick="handleCancel(${i})">Cancel</button>`;
-                    else action = `<div class="flex gap-2"><input id="rate_${i}" placeholder="APR%" class="w-12 bg-black border border-gray-700 text-xs p-1"><button class="bg-brand px-3 py-1 rounded text-xs text-white" onclick="makeOffer(${i})">Offer</button></div>`;
-
-                    html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a><div class="text-[10px] text-gray-500 mt-1">${req[0].slice(0,6)}...</div></td><td class="p-4 text-right font-mono text-emerald-400">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right font-mono text-white">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right text-xs">View Offers</td><td class="p-4 text-right">${action}</td></tr>`;
+                    html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a></td><td class="p-4 text-right text-emerald-400">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right text-white">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right"><div class="flex gap-2 justify-end"><input id="rate_${i}" placeholder="APR%" class="w-12 bg-black border border-gray-700 text-xs p-1 rounded"><button class="bg-brand px-3 py-1 rounded text-xs text-white" onclick="makeOffer(${i})">Offer</button></div></td></tr>`;
                 }
             } catch(e) {}
         }
-        tbody.innerHTML = html;
+        tbody.innerHTML = html || '<tr><td colspan="5" class="p-8 text-center text-gray-500">No requests found.</td></tr>';
+    }
+
+    async function loadMyOffers() {
+        const div = document.getElementById("borrowerOffers");
+        const nextId = await marketContract.nextOfferId();
+        let html = "";
+        
+        for(let i=Number(nextId)-1; i>=1; i--) {
+            try {
+                const offer = await marketContract.offers(i); 
+                if(offer[3] === true) {
+                    const req = await marketContract.requests(offer[0]);
+                    if(req[0].toLowerCase() === window.myProxy?.toLowerCase() && req[5] === true) {
+                        const info = await getInfo(req[1]);
+                        html += `<div class="panel p-4 rounded border border-gray-800 flex justify-between items-center"><div><div class="text-xs text-gray-500">Offer #${i} on:</div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-emerald-400 font-mono text-xs mt-1">Rate: ${Number(offer[2])}% APR</div></div><button onclick="handleAcceptOffer(${i})" class="bg-emerald-600 text-white px-4 py-2 rounded text-xs font-bold">Accept Deal</button></div>`;
+                    }
+                }
+            } catch(e) {}
+        }
+        div.innerHTML = html || '<p class="text-gray-500 text-xs col-span-2">No offers received yet.</p>';
     }
 
     async function loadMyLoans() {
-        // Fetch Active Loans where I am Borrower
-        const div = document.getElementById("borrowerLoans");
+        const borrowDiv = document.getElementById("borrowerLoans");
+        const lendDiv = document.getElementById("lenderLoans");
         const nextId = await marketContract.nextRequestId();
-        let html = "";
+        
+        let borrowHtml = "";
+        let lendHtml = "";
+        let totalBorrowed = 0;
+        let totalLent = 0;
+        let activeCount = 0;
+
         for(let i=1; i<Number(nextId); i++) {
             try {
-                const loan = await marketContract.loans(i); // lender, startTime, rate, duration
+                const loan = await marketContract.loans(i); 
                 const req = await marketContract.requests(i);
                 
-                // If I am borrower
-                if(req[6] && req[0].toLowerCase() === window.myProxy?.toLowerCase()) {
-                    const end = Number(loan[1]) + Number(loan[3]);
+                if(req[6] === true) { 
                     const info = await getInfo(req[1]);
+                    const principal = Number(ethers.formatUnits(req[3], 6));
+                    const end = Number(loan[1]) + Number(loan[3]);
+
+                    if(req[0].toLowerCase() === window.myProxy?.toLowerCase()) {
+                        borrowHtml += `<div class="panel p-4 rounded border border-gray-800"><div class="flex justify-between mb-2"><span class="font-bold text-white">${info.title}</span><span class="text-xs bg-red-900 text-red-200 px-2 py-1 rounded" id="timer_${i}" data-end="${end}">Loading...</span></div><div class="text-xs text-gray-400">Owed: $${principal} + Interest</div><div class="mt-4 flex gap-2"><button onclick="handleRepay(${i})" class="w-full bg-emerald-600 text-white py-2 rounded font-bold text-xs">Repay</button></div></div>`;
+                        totalBorrowed += principal;
+                        activeCount++;
+                    }
                     
-                    html += `<div class="panel p-4 rounded border border-gray-800"><div class="flex justify-between mb-2"><span class="font-bold text-white">${info.title}</span><span class="text-xs bg-red-900 text-red-200 px-2 py-1 rounded" id="timer_${i}" data-end="${end}">Loading...</span></div><div class="flex justify-between text-xs text-gray-400"><span>Lender: ${loan[0].slice(0,6)}...</span><span>Rate: ${Number(loan[2])}%</span></div><div class="mt-4 flex gap-2"><button onclick="handleRepay(${i})" class="w-full bg-emerald-600 text-white py-2 rounded font-bold text-xs">Repay Loan</button><button onclick="handleExtend(${i})" class="w-full border border-gray-600 text-gray-400 py-2 rounded text-xs">Extend</button></div></div>`;
+                    if(loan[0].toLowerCase() === userAddress.toLowerCase()) {
+                        lendHtml += `<div class="panel p-4 rounded border border-gray-800"><div class="flex justify-between mb-2"><span class="font-bold text-white">${info.title}</span><span class="text-xs text-brand">Active</span></div><div class="text-xs text-gray-400">Lent: $${principal} @ ${Number(loan[2])}%</div><div class="mt-2 text-xs text-gray-500">Borrower: ${req[0].slice(0,6)}...</div></div>`;
+                        totalLent += principal;
+                        activeCount++;
+                    }
+                } else if (req[5] === true && req[0].toLowerCase() === window.myProxy?.toLowerCase()) {
+                    const info = await getInfo(req[1]);
+                    borrowHtml += `<div class="panel p-4 rounded border border-gray-800 opacity-70"><div class="flex justify-between mb-2"><span class="font-bold text-white">${info.title}</span><span class="text-xs text-orange-400">Pending</span></div><div class="text-xs text-gray-400">Waiting for offers...</div><button onclick="handleCancel(${i})" class="mt-2 w-full border border-red-900 text-red-400 py-1 rounded text-xs">Cancel Request</button></div>`;
                 }
             } catch(e) {}
         }
-        div.innerHTML = html || "<p class='text-gray-500 text-sm'>No active loans.</p>";
+        
+        borrowDiv.innerHTML = borrowHtml || '<p class="text-gray-500 text-xs">No active debts.</p>';
+        lendDiv.innerHTML = lendHtml || '<p class="text-gray-500 text-xs">No active investments.</p>';
+        
+        document.getElementById("statBorrowed").innerText = `$${totalBorrowed.toFixed(2)}`;
+        document.getElementById("statLent").innerText = `$${totalLent.toFixed(2)}`;
+        document.getElementById("statCount").innerText = activeCount;
     }
 
     function updateTimers() {
         document.querySelectorAll('[id^="timer_"]').forEach(el => {
             const end = Number(el.getAttribute("data-end"));
-            const now = Math.floor(Date.now()/1000);
-            const diff = end - now;
+            const diff = end - Math.floor(Date.now()/1000);
             if(diff <= 0) el.innerText = "LIQUIDATION RISK";
             else {
                 const m = Math.floor(diff / 60);
@@ -297,13 +395,16 @@
     }
 
     async function getInfo(id) {
+        if(window.infoCache?.[id]) return window.infoCache[id];
         try {
             const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`);
-            return await res.json();
+            const d = await res.json();
+            if(!window.infoCache) window.infoCache = {};
+            window.infoCache[id] = d;
+            return d;
         } catch { return {title:"Unknown", link:"#"}; }
     }
 
-    // Initialize
     async function initProxy() {
         try {
             const r = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
@@ -312,25 +413,25 @@
         } catch(e) {}
     }
     
-    // Override connect to fetch proxy
-    const _c = connectWallet;
-    connectWallet = async () => { await _c(); await initProxy(); loadMarketFeed(); loadMyLoans(); }
-
-    // Handlers (Simplified)
     async function makeOffer(id) {
         const rate = document.getElementById("rate_"+id).value;
         const usdc = new ethers.Contract(USDC_ADDR, ["function approve(address,uint256)"], signer);
         await (await usdc.approve(MARKET_ADDR, ethers.MaxUint256)).wait();
         await (await marketContract.makeOffer(id, Number(rate))).wait();
-        alert("Offer Sent");
+        alert("Offer Sent!");
+        loadMarketFeed();
+    }
+    
+    async function handleAcceptOffer(id) {
+        if(confirm("Accept Deal?")) if(await signAndRelay("acceptOffer", [id])) { alert("Loan Started!"); location.reload(); }
     }
     
     async function handleRepay(id) {
-        if(confirm("Repay?")) if(await signAndRelay("repayLoan", [id])) alert("Repaid!");
+        if(confirm("Repay Loan?")) if(await signAndRelay("repayLoan", [id])) { alert("Repaid!"); location.reload(); }
     }
     
     async function handleCancel(id) {
-        if(confirm("Cancel?")) if(await signAndRelay("cancelRequest", [id])) alert("Cancelled!");
+        if(confirm("Cancel Request?")) if(await signAndRelay("cancelRequest", [id])) { alert("Cancelled!"); location.reload(); }
     }
     </script>
 </body>
