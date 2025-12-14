@@ -213,7 +213,7 @@
 
     <script>
     // --- 🚀 CONFIGURATION ---
-    const MARKET_ADDR = "0x30672b8B427BD7277c8467221441e2D3Dbf833E4"; // Ensure this is your deployed address
+    const MARKET_ADDR = "0x30672b8B427BD7277c8467221441e2D3Dbf833E4"; 
     const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
     const RENDER_API_URL = "https://polyloans-api.onrender.com"; 
 
@@ -221,7 +221,7 @@
     const INFO_CACHE = {}; 
 
     // ABIs
-    const MARKET_ABI = ["function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)","function makeOffer(uint256,uint256,uint256) external returns (uint256)","function acceptOffer(uint256) external","function repayLoan(uint256) external","function cancelRequest(uint256) external","function requestExtension(uint256,uint256) external","function acceptExtension(uint256) external","function buyoutLoan(uint256) external","function liquidateByTime(uint256) external","function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)","function loans(uint256) view returns (address, uint256, uint256, uint256)","function offers(uint256) view returns (uint256, address, uint256, bool)","function extensions(uint256) view returns (bool, uint256, uint256)","function nextRequestId() view returns (uint256)","function nextOfferId() view returns (uint256)"];
+    const MARKET_ABI = ["function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)","function makeOffer(uint256,uint256,uint256) external returns (uint256)","function acceptOffer(uint256) external","function repayLoan(uint256) external","function cancelRequest(uint256) external","function requestExtension(uint256,uint256) external","function acceptExtension(uint256) external","function buyoutLoan(uint256) external","function liquidateByTime(uint256) external","function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)","function loans(uint256) view returns (address, uint256, uint256, uint256)","function offers(uint256) view returns (uint256, address, uint256, bool)","function nextRequestId() view returns (uint256)","function nextOfferId() view returns (uint256)"];
     const USDC_ABI = ["function approve(address, uint256) external"];
 
     async function connectWallet() {
@@ -309,7 +309,7 @@
         status.innerText = "⏳ Please Sign...";
         
         const tx = await signAndRelay('createRequest', [id, BigInt(Math.floor(sh*1e6)), BigInt(Math.floor(pr*1e6)), BigInt(dur*60)]);
-        if(tx) { status.innerHTML = `<span class="text-emerald-400">✅ Posted!</span>`; setTimeout(loadMarketFeed, 4000); }
+        if(tx) { status.innerHTML = `<span class="text-emerald-400">✅ Posted!</span>`; setTimeout(() => location.reload(), 2000); }
         else { status.innerText = "❌ Failed"; }
     }
 
@@ -329,7 +329,7 @@
     }
 
     // HELPERS
-    async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy; }catch(e){} }
+    async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy ? d.proxy.toLowerCase() : null; }catch(e){} }
     async function getMarketInfo(tokenId) {
         if(INFO_CACHE[tokenId]) return INFO_CACHE[tokenId];
         try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${tokenId}`); const data = await res.json(); 
@@ -369,15 +369,18 @@
         for(let i=Number(nextId)-1; i>=1; i--) {
             try {
                 const req = await marketContract.requests(i);
-                const isMine = req[0].toLowerCase() === window.myProxy?.toLowerCase();
+                // Active, Not Loan, and NOT Mine
+                const isMine = (req[0].toLowerCase() === window.myProxy);
+                
                 if(req[5] && !req[6] && !isMine) {
                     const info = await getInfo(req[1]);
-                    html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a></td><td class="p-4 text-right text-emerald-400 font-mono">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right text-white font-mono">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right"><div class="flex gap-2 justify-end"><input id="rate_${i}" placeholder="%" class="input-premium w-12 text-center text-xs p-1 rounded"><button class="bg-brand px-3 py-1 rounded text-xs text-white" onclick="makeOffer(${i})">Offer</button></div></td></tr>`;
+                    html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a></td><td class="p-4 text-right text-emerald-400 font-mono">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right text-white font-mono">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right"><div class="flex gap-2 justify-end"><input id="rate_${i}" placeholder="APR%" class="input-premium w-12 text-center text-xs p-1 rounded"><button class="bg-brand px-3 py-1 rounded text-xs text-white" onclick="makeOffer(${i})">Offer</button></div></td></tr>`;
                 }
             } catch(e){}
         }
         tbody.innerHTML = html || '<tr><td colspan="5" class="p-8 text-center text-gray-500">No requests found.</td></tr>';
     }
+    
     async function makeOffer(id) {
         const r = document.getElementById("rate_"+id).value;
         const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
@@ -395,7 +398,7 @@
                 const off = await marketContract.offers(i);
                 if(off[3]) {
                     const req = await marketContract.requests(off[0]);
-                    if(req[0].toLowerCase() === window.myProxy?.toLowerCase() && req[5]) {
+                    if(req[0].toLowerCase() === window.myProxy && req[5]) {
                         const info = await getInfo(req[1]);
                         html += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] flex justify-between items-center"><div><div class="text-xs text-gray-500">Offer #${i} on:</div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-emerald-400 font-mono text-xs mt-1">Rate: ${Number(off[2])}% APR</div></div><button onclick="handleAcceptOffer(${i})" class="bg-emerald-600 text-white px-4 py-2 rounded text-xs font-bold">Accept Deal</button></div>`;
                     }
@@ -410,9 +413,6 @@
         const lDiv = document.getElementById("lenderLoans");
         const nextId = await marketContract.nextRequestId();
         let bHtml="", lHtml="", borrowed=0, lent=0, count=0;
-        
-        if(!window.myProxy) await initProxy();
-        const myProxy = window.myProxy?.toLowerCase();
 
         for(let i=1; i<Number(nextId); i++) {
             try {
@@ -424,7 +424,7 @@
                     const princ = Number(ethers.formatUnits(req[3],6));
                     const end = Number(loan[1]) + Number(loan[3]);
 
-                    if(req[0].toLowerCase() === myProxy) {
+                    if(req[0].toLowerCase() === window.myProxy) {
                         borrowed += princ; count++;
                         bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs bg-emerald-900 text-emerald-200 px-2 py-0.5 rounded">Active</span></div><div class="text-xs text-gray-400">Owed: $${princ} + Interest</div><button onclick="handleRepay(${i})" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded font-bold text-xs mt-3">Repay Loan</button></div>`;
                     }
@@ -432,13 +432,12 @@
                         lent += princ; count++;
                         lHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs text-brand">Active</span></div><div class="text-xs text-gray-400">Lent: $${princ} @ ${Number(loan[2])}%</div><button onclick="handleLiquidate(${i})" class="w-full bg-red-900/50 hover:bg-red-900 text-red-300 py-2 rounded text-xs mt-3 border border-red-800">Seize (If Expired)</button></div>`;
                     }
-                } else if (req[5] && req[0].toLowerCase() === myProxy) {
+                } else if (req[5] && req[0].toLowerCase() === window.myProxy) {
                     const info = await getInfo(req[1]);
                     bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] opacity-70"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs text-orange-400 border border-orange-400/30 px-2 rounded">Pending</span></div><button onclick="handleCancelRequest(${i})" class="w-full border border-red-900 text-red-400 py-2 rounded text-xs hover:bg-red-900/20">Cancel Request</button></div>`;
                 }
             } catch(e){}
         }
-        
         bDiv.innerHTML = bHtml || '<p class="text-gray-500 text-sm text-center">No active debts.</p>';
         lDiv.innerHTML = lHtml || '<p class="text-gray-500 text-sm text-center col-span-2">No investments.</p>';
         document.getElementById("statBorrowed").innerText = `$${borrowed.toFixed(2)}`;
