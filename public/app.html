@@ -81,7 +81,9 @@
     <!-- Main Grid -->
     <main class="flex-1 p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 max-w-[1600px] mx-auto w-full">
 
-        <!-- TAB 1: OVERVIEW -->
+        <!-- ========================================== -->
+        <!-- TAB 1: OVERVIEW (Stats Only) -->
+        <!-- ========================================== -->
         <div id="view-overview" class="col-span-12 space-y-6 block">
             <h2 class="text-xl font-bold text-white mb-6">Account Overview</h2>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -92,7 +94,9 @@
             </div>
         </div>
 
-        <!-- TAB 2: BORROW -->
+        <!-- ========================================== -->
+        <!-- TAB 2: BORROW (Create, Offers, Debts) -->
+        <!-- ========================================== -->
         <div id="view-borrow" class="col-span-12 hidden-tab">
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 
@@ -107,6 +111,7 @@
                         <select id="positionSelect" onchange="autoFillForm()" class="input-premium w-full rounded-xl px-4 py-3 text-sm cursor-pointer appearance-none">
                             <option>-- Connect Wallet First --</option>
                         </select>
+                        <!-- FIXED: Correct ID 'priceDisplay' -->
                         <div id="priceDisplay" class="mt-2 text-xs font-mono text-gray-400 h-5"></div>
                     </div>
 
@@ -208,8 +213,8 @@
     </main>
 
     <script>
-    // ✅ YOUR MARKET ADDRESS
-    const MARKET_ADDR = "0x30672b8B427BD7277c8467221441e2D3Dbf833E4"; 
+    // --- 🚀 CONFIGURATION ---
+    const MARKET_ADDR = "0x30672b8B427BD7277c8467221441e2D3Dbf833E4"; // UPDATE THIS
     const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
     const RENDER_API_URL = "https://polyloans-api.onrender.com"; 
 
@@ -221,35 +226,22 @@
     const USDC_ABI = ["function approve(address, uint256) external"];
 
     async function connectWallet() {
-        // WALLET FIX: Handle conflicts gracefully
         let ethProvider = window.ethereum;
         if (!ethProvider) return alert("Install Rabby or MetaMask!");
-        
-        // Prefer Rabby if multiple are present
         if (window.ethereum.providers?.length) {
             ethProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum.providers[0];
         }
 
-        // FORCE POPUP
         try {
             await ethProvider.request({ method: 'eth_requestAccounts' });
-        } catch(e) { return; }
+            try { await ethProvider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] }); } catch(e){}
 
-        const provider = new ethers.BrowserProvider(ethProvider);
-        
-        try {
-            const network = await provider.getNetwork();
-            if(Number(network.chainId) !== 137) {
-                await ethProvider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
-            }
-
+            const provider = new ethers.BrowserProvider(ethProvider);
             signer = await provider.getSigner();
             userAddress = await signer.getAddress();
             marketContract = new ethers.Contract(MARKET_ADDR, MARKET_ABI, signer);
             
-            // UI Updates
-            const shortAddr = userAddress.slice(0,6) + "..." + userAddress.slice(-4);
-            document.getElementById("addrText").innerText = shortAddr;
+            document.getElementById("addrText").innerText = userAddress.slice(0,6) + "..." + userAddress.slice(-4);
             document.getElementById("userAddr").classList.remove("hidden");
             document.getElementById("userAddr").classList.add("flex");
             document.getElementById("btnConnect").style.display = "none";
@@ -272,7 +264,6 @@
         document.getElementById(`tab-${t}`).classList.add('tab-active');
     }
 
-    // --- 🔐 SIGNATURE LOGIC ---
     async function signAndRelay(func, args) {
         try {
             const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
@@ -283,25 +274,8 @@
             const data = iface.encodeFunctionData(func, args);
             
             const domain = { verifyingContract: meta.proxy, chainId: 137 };
-            
-            // ✅ EXACT TYPE MATCH FOR GS026 FIX
-            const types = { 
-                SafeTx: [
-                    {type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},
-                    {type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},
-                    {type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},
-                    {type:"uint256",name:"nonce"}
-                ] 
-            };
-            
-            // ✅ safeTxGas: 0 to match backend
-            const message = { 
-                to: MARKET_ADDR, value: 0, data, operation: 0, 
-                safeTxGas: 0, baseGas: 0, gasPrice: 0, 
-                gasToken: "0x0000000000000000000000000000000000000000", 
-                refundReceiver: "0x0000000000000000000000000000000000000000", 
-                nonce: meta.nonce 
-            };
+            const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
+            const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
 
             const sig = await signer.signTypedData(domain, types, message);
             const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: MARKET_ADDR, data, signature: sig }) });
@@ -344,7 +318,6 @@
         if(await signAndRelay('cancelRequest', [requestId])) { alert("✅ Request Cancelled!"); location.reload(); }
     }
 
-    // HELPERS
     async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy ? d.proxy.toLowerCase() : null; }catch(e){} }
     async function getMarketInfo(tokenId) {
         if(INFO_CACHE[tokenId]) return INFO_CACHE[tokenId];
@@ -366,7 +339,7 @@
             document.getElementById("statShares").innerText = data.length;
         } catch(e) { select.innerHTML = '<option>⚠️ Error Scanning</option>'; }
     }
-    function autoFillForm() { const sel = document.getElementById("positionSelect"); const opt = sel.selectedOptions[0]; if(opt.value) { document.getElementById("b_tokenId").value = opt.value; document.getElementById("balanceDisplay").innerText = `Bal: ${opt.getAttribute("data-bal")} | Price: $${Number(opt.getAttribute("data-price")).toFixed(2)}`; } }
+    function autoFillForm() { const sel = document.getElementById("positionSelect"); const opt = sel.selectedOptions[0]; if(opt.value) { document.getElementById("b_tokenId").value = opt.value; document.getElementById("priceDisplay").innerText = `Bal: ${opt.getAttribute("data-bal")} | Price: $${Number(opt.getAttribute("data-price")).toFixed(2)}`; } }
     function checkLTV() {
         const s = Number(document.getElementById("b_shares").value);
         const p = Number(document.getElementById("b_principal").value);
@@ -377,7 +350,6 @@
         else { document.getElementById("ltvWarning").innerText = "LTV OK"; document.getElementById("btnCreate").disabled = false; }
     }
 
-    // LOADERS
     async function loadMarketFeed() {
         const tbody = document.getElementById("marketFeed");
         const nextId = await marketContract.nextRequestId();
@@ -385,9 +357,7 @@
         for(let i=Number(nextId)-1; i>=1; i--) {
             try {
                 const req = await marketContract.requests(i);
-                // Active, Not Loan, and NOT Mine
-                const isMine = (req[0].toLowerCase() === window.myProxy);
-                
+                const isMine = req[0].toLowerCase() === window.myProxy;
                 if(req[5] && !req[6] && !isMine) {
                     const info = await getInfo(req[1]);
                     html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a></td><td class="p-4 text-right text-emerald-400 font-mono">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right text-white font-mono">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right"><div class="flex gap-2 justify-end"><input id="rate_${i}" placeholder="APR%" class="input-premium w-12 text-center text-xs p-1 rounded"><button class="bg-brand px-3 py-1 rounded text-xs text-white" onclick="makeOffer(${i})">Offer</button></div></td></tr>`;
