@@ -4,10 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PolyLoans | Dashboard</title>
-    <!-- Tailwind & Ethers -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     
     <script>
@@ -49,7 +47,6 @@
 </head>
 <body class="min-h-screen flex flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#020408] to-[#020408]">
 
-    <!-- Navbar -->
     <nav class="h-20 border-b border-[#1E2129] flex items-center justify-between px-8 bg-[#020408]/80 backdrop-blur-md sticky top-0 z-50">
         <a href="/" class="flex items-center gap-3 group">
             <div class="w-8 h-8 bg-brand rounded flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition">▲</div>
@@ -57,14 +54,12 @@
         </a>
         
         <div class="flex items-center gap-6">
-            <!-- Tabs -->
             <div id="navTabs" class="hidden flex gap-6 text-sm font-medium">
                 <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active">Overview</button>
                 <button onclick="switchTab('borrow')" id="tab-borrow" class="tab-btn">Borrow</button>
                 <button onclick="switchTab('lend')" id="tab-lend" class="tab-btn">Lend</button>
             </div>
 
-            <!-- Wallet -->
             <div id="walletBox" class="flex items-center gap-4">
                 <div id="userAddr" class="hidden flex items-center gap-2 bg-[#0B0D12] border border-[#1E2129] px-3 py-1.5 rounded-full">
                     <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
@@ -77,10 +72,8 @@
         </div>
     </nav>
 
-    <!-- Main Grid -->
     <main class="flex-1 p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 max-w-[1600px] mx-auto w-full">
 
-        <!-- TAB 1: OVERVIEW -->
         <div id="view-overview" class="col-span-12 space-y-6 block">
             <h2 class="text-xl font-bold text-white mb-6">Account Overview</h2>
             <div class="grid grid-cols-4 gap-6">
@@ -91,11 +84,9 @@
             </div>
         </div>
 
-        <!-- TAB 2: BORROW -->
         <div id="view-borrow" class="col-span-12 hidden-tab">
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 
-                <!-- LEFT: Create Request -->
                 <div class="lg:col-span-4 panel rounded-xl p-6 space-y-5 h-fit sticky top-24">
                     <h2 class="font-bold text-white flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full bg-brand"></span> New Loan Request
@@ -106,10 +97,9 @@
                         <select id="positionSelect" onchange="autoFillForm()" class="input-premium w-full rounded-xl px-4 py-3 text-sm cursor-pointer appearance-none">
                             <option>-- Connect Wallet First --</option>
                         </select>
-                        <div id="priceDisplay" class="mt-2 text-xs font-mono text-gray-400 h-5"></div>
+                        <div id="balanceDisplay" class="mt-2 text-xs font-mono text-gray-400 h-5"></div>
                     </div>
 
-                    <!-- Hidden ID -->
                     <input type="text" id="b_tokenId" class="hidden">
 
                     <div class="grid grid-cols-2 gap-4">
@@ -136,7 +126,6 @@
                     <div id="b_status" class="text-center text-xs mt-3 text-gray-500 font-mono"></div>
                 </div>
 
-                <!-- RIGHT: Offers & Debts -->
                 <div class="lg:col-span-8 space-y-6">
                     <div class="panel rounded-xl p-6">
                         <div class="flex justify-between items-center mb-4 border-b border-[#1E2129] pb-4">
@@ -150,7 +139,7 @@
 
                     <div class="panel rounded-xl p-6">
                         <div class="flex justify-between items-center mb-4 border-b border-[#1E2129] pb-4">
-                            <h3 class="font-bold text-white">My Active Debts</h3>
+                            <h3 class="font-bold text-white">My Active Debts (Pending & Active)</h3>
                             <button onclick="loadMyLoans()" class="text-xs text-brand hover:text-white transition">Refresh</button>
                         </div>
                         <div id="borrowerLoans" class="space-y-4">
@@ -161,10 +150,8 @@
             </div>
         </div>
 
-        <!-- TAB 3: LEND -->
         <div id="view-lend" class="col-span-12 hidden-tab">
             <div class="space-y-6">
-                <!-- Market Feed -->
                 <div class="panel rounded-xl overflow-hidden">
                     <div class="p-5 border-b border-[#1E2129] flex justify-between items-center bg-[#050608]/50">
                         <h2 class="font-bold text-white text-sm uppercase tracking-wide flex items-center gap-2">
@@ -191,7 +178,6 @@
                     </div>
                 </div>
 
-                <!-- My Investments -->
                 <div class="panel rounded-xl p-6">
                     <div class="flex justify-between items-center mb-4 border-b border-[#1E2129] pb-4">
                         <h3 class="font-bold text-white">My Investments</h3>
@@ -206,7 +192,6 @@
 
     </main>
 
-    <!-- JS LOGIC -->
     <script>
     // --- 🚀 CONFIGURATION ---
     const MARKET_ADDR = "0x59B3a47dBe8B251eB14E57509A15Ed829065B91e"; 
@@ -275,6 +260,7 @@
             const data = iface.encodeFunctionData(func, args);
             
             const domain = { verifyingContract: meta.proxy, chainId: 137 };
+            // Ensure safeTxGas is 0 in signature to match backend force
             const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
             const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
 
@@ -296,7 +282,7 @@
         const status = document.getElementById("b_status");
         status.innerText = "⏳ Signing...";
         const tx = await signAndRelay('createRequest', [id, BigInt(Math.floor(sh*1e6)), BigInt(Math.floor(pr*1e6)), BigInt(dur*60)]);
-        if(tx) { status.innerHTML = `<span class="text-emerald-400">✅ Posted!</span>`; setTimeout(loadMarketFeed, 3000); }
+        if(tx) { status.innerHTML = `<span class="text-emerald-400">✅ Posted!</span>`; setTimeout(() => location.reload(), 2000); }
         else { status.innerText = "❌ Failed"; }
     }
 
@@ -323,7 +309,7 @@
             const opt = sel.selectedOptions[0];
             document.getElementById("b_tokenId").value = opt.value;
             const price = Number(opt.getAttribute("data-price"));
-            const label = price === 0 ? "$0.50 (Est)" : `$${price.toFixed(2)}`;
+            const label = (price === 0 || price === 0.5) ? "$0.50 (Est)" : `$${price.toFixed(2)}`;
             document.getElementById("balanceDisplay").innerText = `Bal: ${opt.getAttribute("data-bal")} | Price: ${label}`;
         }
     }
@@ -355,13 +341,19 @@
         const tbody = document.getElementById("marketFeed");
         const nextId = await marketContract.nextRequestId();
         let html = "";
+        
+        // Safety checks for logic
+        if(!window.myProxy) await initProxy();
+        const myProxy = window.myProxy?.toLowerCase();
+
         for(let i=Number(nextId)-1; i>=1; i--) {
             try {
                 const req = await marketContract.requests(i);
-                const isMine = req[0].toLowerCase() === window.myProxy?.toLowerCase();
+                const isMine = req[0].toLowerCase() === myProxy;
+                // Only show if: Active, NOT a Loan, and NOT Mine
                 if(req[5] && !req[6] && !isMine) {
                     const info = await getInfo(req[1]);
-                    html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a></td><td class="p-4 text-right text-emerald-400">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right text-white">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right"><div class="flex gap-2 justify-end"><input id="rate_${i}" placeholder="%" class="input-premium w-12 text-center text-xs p-1 rounded"><button class="bg-brand px-3 py-1 rounded text-xs text-white" onclick="makeOffer(${i})">Offer</button></div></td></tr>`;
+                    html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a></td><td class="p-4 text-right text-emerald-400 font-mono">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right text-white font-mono">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right"><div class="flex gap-2 justify-end"><input id="rate_${i}" placeholder="%" class="input-premium w-12 text-center text-xs p-1 rounded"><button class="bg-brand px-3 py-1 rounded text-xs text-white" onclick="makeOffer(${i})">Offer</button></div></td></tr>`;
                 }
             } catch(e){}
         }
@@ -392,48 +384,27 @@
         const lDiv = document.getElementById("lenderLoans");
         const nextId = await marketContract.nextRequestId();
         let bHtml="", lHtml="", borrowed=0, lent=0, count=0;
+
+        // Ensure variables are ready
+        if(!window.myProxy) await initProxy();
+        const myProxy = window.myProxy?.toLowerCase();
+        const myAddr = userAddress?.toLowerCase();
+
         for(let i=1; i<Number(nextId); i++) {
             try {
                 const req = await marketContract.requests(i);
                 const loan = await marketContract.loans(i);
+                const reqBorrower = req[0].toLowerCase();
+                
+                const isMine = (reqBorrower === myProxy);
+
                 if(req[6]) { 
+                    // ACTIVE LOAN
                     const info = await getInfo(req[1]);
                     const princ = Number(ethers.formatUnits(req[3],6));
-                    if(req[0].toLowerCase() === window.myProxy?.toLowerCase()) {
+                    const end = Number(loan[1]) + Number(loan[3]);
+                    const left = end - Math.floor(Date.now()/1000);
+
+                    if(isMine) {
                         borrowed += princ; count++;
-                        bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm">${info.title}</span><span class="text-xs bg-red-900 text-red-200 px-2 py-0.5 rounded">Active</span></div><div class="text-xs text-gray-400">Owed: $${princ} + Interest</div><button onclick="handleRepay(${i})" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded font-bold text-xs mt-3">Repay Loan</button></div>`;
-                    }
-                    if(loan[0].toLowerCase() === userAddress.toLowerCase()) {
-                        lent += princ; count++;
-                        lHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm">${info.title}</span><span class="text-xs text-brand">Active</span></div><div class="text-xs text-gray-400">Lent: $${princ} @ ${Number(loan[2])}%</div><button onclick="handleLiquidate(${i})" class="w-full bg-red-900/50 hover:bg-red-900 text-red-300 py-2 rounded text-xs mt-3 border border-red-800">Seize Collateral</button></div>`;
-                    }
-                } else if (req[5] && req[0].toLowerCase() === window.myProxy?.toLowerCase()) {
-                    const info = await getInfo(req[1]);
-                    bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] opacity-70"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm">${info.title}</span><span class="text-xs text-orange-400">Pending</span></div><button onclick="handleCancelRequest(${i})" class="mt-2 w-full border border-red-900 text-red-400 py-1 rounded text-xs hover:bg-red-900/20">Cancel Request</button></div>`;
-                }
-            } catch(e){}
-        }
-        bDiv.innerHTML = bHtml || '<p class="text-gray-500 text-sm text-center">No active debts.</p>';
-        lDiv.innerHTML = lHtml || '<p class="text-gray-500 text-sm text-center col-span-2">No investments.</p>';
-        document.getElementById("statBorrowed").innerText = `$${borrowed.toFixed(2)}`;
-        document.getElementById("statLent").innerText = `$${lent.toFixed(2)}`;
-        document.getElementById("statCount").innerText = count;
-    }
-    
-    // HELPERS
-    async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy; }catch(e){} }
-    async function makeOffer(id) {
-        const r = document.getElementById("rate_"+id).value;
-        const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
-        await(await u.approve(MARKET_ADDR, ethers.MaxUint256)).wait();
-        await(await marketContract.makeOffer(id, Number(r))).wait();
-        alert("Offer Sent!"); loadMarketFeed();
-    }
-    async function handleAcceptOffer(id) { if(confirm("Accept Deal?")) if(await signAndRelay("acceptOffer",[id])) { alert("Loan Started!"); location.reload(); } }
-    async function handleRepay(id) { if(confirm("Repay Loan?")) if(await signAndRelay("repayLoan",[id])) { alert("Repaid!"); location.reload(); } }
-    async function handleCancelRequest(id) { if(confirm("Cancel Request?")) if(await signAndRelay("cancelRequest",[id])) { alert("Cancelled!"); location.reload(); } }
-    async function handleLiquidate(id) { if(confirm("Seize Assets?")) { try{ await(await marketContract.liquidateByTime(id)).wait(); alert("Seized!"); }catch(e){alert(e.message);} } }
-    function updateTimers() {} // Placeholder for simple refresh loop
-    </script>
-</body>
-</html>
+                        bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm">${info.title}</span><span class="text-xs bg-emerald-900 text-emerald-200 px-2 py-0.5 rounded">Active</span></div><div class="text-xs text-gray-400">Owed: $${princ} + Interest</div><div class="text-xs text-
