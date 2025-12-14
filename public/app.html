@@ -81,9 +81,7 @@
     <!-- Main Grid -->
     <main class="flex-1 p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 max-w-[1600px] mx-auto w-full">
 
-        <!-- ========================================== -->
-        <!-- TAB 1: OVERVIEW (Stats Only) -->
-        <!-- ========================================== -->
+        <!-- TAB 1: OVERVIEW -->
         <div id="view-overview" class="col-span-12 space-y-6 block">
             <h2 class="text-xl font-bold text-white mb-6">Account Overview</h2>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -94,9 +92,7 @@
             </div>
         </div>
 
-        <!-- ========================================== -->
-        <!-- TAB 2: BORROW (Create, Offers, Debts) -->
-        <!-- ========================================== -->
+        <!-- TAB 2: BORROW -->
         <div id="view-borrow" class="col-span-12 hidden-tab">
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 
@@ -212,7 +208,7 @@
     </main>
 
     <script>
-    // --- 🚀 CONFIGURATION ---
+    // ✅ YOUR MARKET ADDRESS
     const MARKET_ADDR = "0x30672b8B427BD7277c8467221441e2D3Dbf833E4"; 
     const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
     const RENDER_API_URL = "https://polyloans-api.onrender.com"; 
@@ -287,8 +283,25 @@
             const data = iface.encodeFunctionData(func, args);
             
             const domain = { verifyingContract: meta.proxy, chainId: 137 };
-            const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
-            const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
+            
+            // ✅ EXACT TYPE MATCH FOR GS026 FIX
+            const types = { 
+                SafeTx: [
+                    {type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},
+                    {type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},
+                    {type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},
+                    {type:"uint256",name:"nonce"}
+                ] 
+            };
+            
+            // ✅ safeTxGas: 0 to match backend
+            const message = { 
+                to: MARKET_ADDR, value: 0, data, operation: 0, 
+                safeTxGas: 0, baseGas: 0, gasPrice: 0, 
+                gasToken: "0x0000000000000000000000000000000000000000", 
+                refundReceiver: "0x0000000000000000000000000000000000000000", 
+                nonce: meta.nonce 
+            };
 
             const sig = await signer.signTypedData(domain, types, message);
             const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: MARKET_ADDR, data, signature: sig }) });
@@ -309,7 +322,10 @@
         status.innerText = "⏳ Please Sign...";
         
         const tx = await signAndRelay('createRequest', [id, BigInt(Math.floor(sh*1e6)), BigInt(Math.floor(pr*1e6)), BigInt(dur*60)]);
-        if(tx) { status.innerHTML = `<span class="text-emerald-400">✅ Posted!</span>`; setTimeout(() => location.reload(), 2000); }
+        if(tx) { 
+            status.innerHTML = `<span class="text-emerald-400">✅ Posted!</span>`; 
+            setTimeout(() => { loadMarketFeed(); loadMyLoans(); }, 2000); 
+        }
         else { status.innerText = "❌ Failed"; }
     }
 
@@ -418,7 +434,6 @@
             try {
                 const req = await marketContract.requests(i);
                 const loan = await marketContract.loans(i);
-                
                 if(req[6]) { 
                     const info = await getInfo(req[1]);
                     const princ = Number(ethers.formatUnits(req[3],6));
