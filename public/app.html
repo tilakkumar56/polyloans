@@ -16,23 +16,17 @@
         .panel { background: #0B0D12; border: 1px solid #1E2129; }
         .input-premium { background: #050608; border: 1px solid #1E2129; color: white; transition: all 0.2s; }
         .input-premium:focus { border-color: #6366F1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); outline: none; }
-        
         .btn-primary { background: #6366F1; color: white; transition: 0.2s; box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39); }
         .btn-primary:hover:not(:disabled) { background: #4F46E5; transform: translateY(-1px); }
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; background: #1E2129; color: #6B7280; box-shadow: none; }
-        
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #020408; }
-        ::-webkit-scrollbar-thumb { background: #1E2129; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #2D3748; }
-        
         .hidden-tab { display: none !important; }
         .tab-btn { border-bottom: 2px solid transparent; color: #6B7280; padding-bottom: 4px; transition: 0.2s; }
         .tab-active { border-bottom: 2px solid #6366F1; color: white; font-weight: bold; }
+        /* Debug Console */
+        #debugConsole { position: fixed; bottom: 0; left: 0; width: 100%; height: 150px; background: #000; border-top: 1px solid #333; color: #0f0; font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 10px; overflow-y: auto; z-index: 9999; display: none; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#020408] to-[#020408]">
+<body class="min-h-screen flex flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#020408] to-[#020408] pb-40">
 
     <nav class="h-20 border-b border-[#1E2129] flex items-center justify-between px-8 bg-[#020408]/80 backdrop-blur-md sticky top-0 z-50">
         <a href="/" class="flex items-center gap-3 group">
@@ -44,6 +38,7 @@
                 <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active">Overview</button>
                 <button onclick="switchTab('borrow')" id="tab-borrow" class="tab-btn">Borrow</button>
                 <button onclick="switchTab('lend')" id="tab-lend" class="tab-btn">Lend</button>
+                <button onclick="toggleDebug()" class="text-xs text-gray-600">Bug Log</button>
             </div>
             <div id="walletBox" class="flex items-center gap-4">
                 <div id="userAddr" class="hidden flex items-center gap-2 bg-[#0B0D12] border border-[#1E2129] px-3 py-1.5 rounded-full">
@@ -71,13 +66,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div class="lg:col-span-4 panel rounded-xl p-6 space-y-5 h-fit sticky top-24">
                     <h2 class="font-bold text-white flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-brand"></span> New Loan Request</h2>
-                    <div>
-                        <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Collateral Asset</label>
-                        <select id="positionSelect" onchange="autoFillForm()" class="input-premium w-full rounded-xl px-4 py-3 text-sm cursor-pointer appearance-none">
-                            <option>-- Connect Wallet First --</option>
-                        </select>
-                        <div id="priceDisplay" class="mt-2 text-xs font-mono text-gray-400 h-5"></div>
-                    </div>
+                    <div><label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Collateral Asset</label><select id="positionSelect" onchange="autoFillForm()" class="input-premium w-full rounded-xl px-4 py-3 text-sm cursor-pointer appearance-none"><option>-- Connect Wallet First --</option></select><div id="priceDisplay" class="mt-2 text-xs font-mono text-gray-400 h-5"></div></div>
                     <input type="text" id="b_tokenId" class="hidden">
                     <div class="grid grid-cols-2 gap-4">
                         <div><label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Lock Shares</label><input type="number" id="b_shares" placeholder="0.00" class="input-premium w-full rounded-xl px-4 py-3 text-sm font-mono" oninput="checkLTV()"></div>
@@ -94,7 +83,7 @@
                         <div id="borrowerOffers" class="grid grid-cols-1 gap-4"><p class="text-gray-500 text-sm text-center py-4">No offers received yet.</p></div>
                     </div>
                     <div class="panel rounded-xl p-6">
-                        <div class="flex justify-between items-center mb-4 border-b border-[#1E2129] pb-4"><h3 class="font-bold text-white">My Active Debts</h3><button onclick="loadMyLoans()" class="text-xs text-brand hover:text-white transition">Refresh</button></div>
+                        <div class="flex justify-between items-center mb-4 border-b border-[#1E2129] pb-4"><h3 class="font-bold text-white">My Active Debts (Pending & Active)</h3><button onclick="loadMyLoans()" class="text-xs text-brand hover:text-white transition">Refresh</button></div>
                         <div id="borrowerLoans" class="space-y-4"><p class="text-gray-500 text-sm text-center py-4">No active debts.</p></div>
                     </div>
                 </div>
@@ -122,6 +111,8 @@
         </div>
     </main>
 
+    <div id="debugConsole">DEBUG LOG:</div>
+
     <script>
     const MARKET_ADDR = "0x30672b8B427BD7277c8467221441e2D3Dbf833E4"; 
     const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
@@ -130,8 +121,20 @@
     let signer, userAddress, marketContract, myProxy;
     const INFO_CACHE = {}; 
 
-    const MARKET_ABI = ["function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)","function makeOffer(uint256,uint256,uint256) external returns (uint256)","function acceptOffer(uint256) external","function repayLoan(uint256) external","function cancelRequest(uint256) external","function requestExtension(uint256,uint256) external","function acceptExtension(uint256) external","function buyoutLoan(uint256) external","function liquidateByTime(uint256) external","function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)","function loans(uint256) view returns (address, uint256, uint256, uint256)","function offers(uint256) view returns (uint256, address, uint256, bool)","function nextRequestId() view returns (uint256)","function nextOfferId() view returns (uint256)"];
+    const MARKET_ABI = ["function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)","function makeOffer(uint256,uint256,uint256) external returns (uint256)","function acceptOffer(uint256) external","function repayLoan(uint256) external","function cancelRequest(uint256) external","function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)","function loans(uint256) view returns (address, uint256, uint256, uint256)","function offers(uint256) view returns (uint256, address, uint256, bool)","function nextRequestId() view returns (uint256)","function nextOfferId() view returns (uint256)"];
     const USDC_ABI = ["function approve(address, uint256) external"];
+
+    function log(msg) {
+        console.log(msg);
+        const d = document.getElementById("debugConsole");
+        d.innerHTML += `<div>${new Date().toLocaleTimeString()} > ${msg}</div>`;
+        d.scrollTop = d.scrollHeight;
+    }
+
+    function toggleDebug() {
+        const d = document.getElementById("debugConsole");
+        d.style.display = d.style.display === "none" ? "block" : "none";
+    }
 
     async function connectWallet() {
         let ethProvider = window.ethereum;
@@ -155,14 +158,14 @@
             document.getElementById("btnConnect").style.display = "none";
             document.getElementById("navTabs").classList.remove("hidden");
             
-            console.log("APP VERSION: FILTER 0.0.1"); // VERIFY IN CONSOLE
+            log(`Connected: ${userAddress}`);
             
             switchTab('overview');
             await initProxy();
             scanPortfolio(); loadMarketFeed(); loadMyOffers(); loadMyLoans();
             setInterval(updateTimers, 2000);
 
-        } catch(e) { console.error(e); alert("Connection Error: " + e.message); }
+        } catch(e) { log("Error: " + e.message); alert("Connection Error"); }
     }
 
     function isMe(address) {
@@ -182,15 +185,20 @@
             try {
                 const req = await marketContract.requests(i);
                 
-                // 🔥 THE FIX: String Comparison to force hide ID 0
+                // FILTER: Hide ID 0
                 if (req[1].toString() === "0") continue;
 
                 if(!req[5] || req[6]) continue;
                 
-                if(!isMe(req[0])) {
-                    const info = await getInfo(req[1]);
-                    html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a></td><td class="p-4 text-right text-emerald-400 font-mono">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right text-white font-mono">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right"><div class="flex gap-2 justify-end"><input id="rate_${i}" placeholder="APR%" class="input-premium w-12 text-center text-xs p-1 rounded"><button class="bg-brand px-3 py-1 rounded text-xs text-white" onclick="makeOffer(${i})">Offer</button></div></td></tr>`;
-                }
+                const info = await getInfo(req[1]);
+                const isMine = isMe(req[0]);
+
+                // SHOW ALL in FEED so you can verify
+                let action = isMine 
+                    ? `<span class="text-xs bg-gray-800 text-gray-400 px-2 py-1 rounded">Your Request</span>` 
+                    : `<div class="flex gap-2"><input id="rate_${i}" placeholder="%" class="w-12 bg-black border border-gray-700 text-xs p-1 rounded text-center"><button onclick="makeOffer(${i})" class="bg-brand px-3 py-1 rounded text-xs text-white">Offer</button></div>`;
+
+                html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a></td><td class="p-4 text-right text-emerald-400 font-mono">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right text-white font-mono">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right">${action}</td></tr>`;
             } catch(e){}
         }
         tbody.innerHTML = html || '<tr><td colspan="5" class="p-8 text-center text-gray-500">No requests found.</td></tr>';
@@ -207,10 +215,10 @@
                 const req = await marketContract.requests(i);
                 const loan = await marketContract.loans(i);
                 
-                // 🔥 THE FIX: String Comparison to force hide ID 0
+                // FILTER: Hide ID 0
                 if (req[1].toString() === "0") continue;
 
-                if(req[6]) { 
+                if(req[6]) { // ACTIVE LOAN
                     const info = await getInfo(req[1]);
                     const princ = Number(ethers.formatUnits(req[3],6));
                     const end = Number(loan[1]) + Number(loan[3]);
@@ -224,9 +232,10 @@
                         lHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs text-brand">Active</span></div><div class="text-xs text-gray-400">Lent: $${princ} @ ${Number(loan[2])}%</div><button onclick="handleLiquidate(${i})" class="w-full bg-red-900/50 hover:bg-red-900 text-red-300 py-2 rounded text-xs mt-3 border border-red-800">Seize (If Expired)</button></div>`;
                     }
                 } 
+                // PENDING REQUEST
                 else if (req[5] && !req[6] && isMe(req[0])) {
                     const info = await getInfo(req[1]);
-                    bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] opacity-70"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs text-orange-400 border border-orange-400/30 px-2 rounded">Pending</span></div><button onclick="handleCancelRequest(${i})" class="w-full border border-red-900 text-red-400 py-2 rounded text-xs hover:bg-red-900/20">Cancel Request</button></div>`;
+                    bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] opacity-70"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs text-orange-400 border border-orange-400/30 px-2 rounded">Pending (Req #${i})</span></div><button onclick="handleCancelRequest(${i})" class="w-full border border-red-900 text-red-400 py-2 rounded text-xs hover:bg-red-900/20">Cancel Request</button></div>`;
                 }
             } catch(e){}
         }
@@ -238,7 +247,7 @@
     }
 
     function switchTab(t) { ['overview','borrow','lend'].forEach(v => { document.getElementById(`view-${v}`).classList.add('hidden-tab'); document.getElementById(`tab-${v}`).classList.remove('tab-active'); }); document.getElementById(`view-${t}`).classList.remove('hidden-tab'); document.getElementById(`tab-${t}`).classList.add('tab-active'); }
-    async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy ? d.proxy.toLowerCase() : null; }catch(e){} }
+    async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy ? d.proxy.toLowerCase() : null; log(`Proxy: ${window.myProxy}`); }catch(e){ log("Proxy Init Error"); } }
     async function getInfo(id) { if(INFO_CACHE[id]) return INFO_CACHE[id]; try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const data = await res.json(); const info = { title: data.title || "Unknown Market", link: data.slug ? `https://polymarket.com/event/${data.slug}` : "#" }; INFO_CACHE[id] = info; return info; } catch { return {title:"Unknown", link:"#"}; } }
     async function scanPortfolio() { const select = document.getElementById("positionSelect"); try { const res = await fetch(`${RENDER_API_URL}/portfolio?user=${userAddress}`); const data = await res.json(); if (data.length === 0) { select.innerHTML = '<option>No assets found</option>'; return; } select.innerHTML = '<option value="">-- Select Asset --</option>'; data.forEach(p => { const opt = document.createElement("option"); opt.value = p.asset; opt.setAttribute("data-bal", p.size); opt.setAttribute("data-price", p.livePrice); opt.text = `${p.title} (${p.outcome})`; select.appendChild(opt); }); document.getElementById("statShares").innerText = data.length; } catch(e) { select.innerHTML = '<option>⚠️ Error Scanning</option>'; } }
     function autoFillForm() { const sel = document.getElementById("positionSelect"); if(sel.value) { const opt = sel.selectedOptions[0]; document.getElementById("b_tokenId").value = opt.value; document.getElementById("priceDisplay").innerText = `Bal: ${opt.getAttribute("data-bal")} | Price: $${Number(opt.getAttribute("data-price")).toFixed(2)}`; } }
@@ -249,9 +258,9 @@
     async function makeOffer(id) { const r = document.getElementById("rate_"+id).value; const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer); await(await u.approve(MARKET_ADDR,ethers.MaxUint256)).wait(); await(await marketContract.makeOffer(id, Number(r))).wait(); alert("Offer Sent!"); loadMarketFeed(); }
     async function handleAcceptOffer(id) { if(confirm("Accept Deal?")) if(await signAndRelay("acceptOffer", [id])) { alert("Deal Active!"); location.reload(); } }
     async function handleRepay(requestId) { if(confirm("Repay Loan?")) if(await signAndRelay("repayLoan", [requestId])) { alert("✅ Repaid!"); location.reload(); } }
-    async function handleCancelRequest(requestId) { if(confirm("Cancel Request?")) if(await signAndRelay("cancelRequest", [requestId])) { alert("✅ Request Cancelled!"); location.reload(); } }
+    async function handleCancelRequest(requestId) { if(confirm("Cancel Request?")) { log("Cancelling..."); if(await signAndRelay("cancelRequest", [requestId])) { alert("✅ Request Cancelled!"); location.reload(); } else { log("Cancel Failed"); } } }
     async function handleLiquidate(id) { try{ await(await marketContract.liquidateByTime(id)).wait(); alert("Seized!"); location.reload(); }catch(e){alert(e.message);} }
-    async function loadMyOffers() { const div = document.getElementById("borrowerOffers"); const nextId = await marketContract.nextOfferId(); let html = ""; for(let i=Number(nextId)-1; i>=1; i--) { try { const off = await marketContract.offers(i); if(off[3]) { const req = await marketContract.requests(off[0]); if(req[0].toLowerCase() === window.myProxy && req[5] && req[1] != 0n) { const info = await getInfo(req[1]); html += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] flex justify-between items-center"><div><div class="text-xs text-gray-500">Offer #${i} on:</div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-emerald-400 font-mono text-xs mt-1">Rate: ${Number(off[2])}% APR</div></div><button onclick="handleAcceptOffer(${i})" class="bg-emerald-600 text-white px-4 py-2 rounded text-xs font-bold">Accept Deal</button></div>`; } } } catch(e){} } div.innerHTML = html || '<p class="text-gray-500 text-xs text-center col-span-2">No offers received yet.</p>'; }
+    async function loadMyOffers() { const div = document.getElementById("borrowerOffers"); const nextId = await marketContract.nextOfferId(); let html = ""; for(let i=Number(nextId)-1; i>=1; i--) { try { const off = await marketContract.offers(i); if(off[3]) { const req = await marketContract.requests(off[0]); if(isMe(req[0]) && req[5] && req[1].toString() !== "0") { const info = await getInfo(req[1]); html += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] flex justify-between items-center"><div><div class="text-xs text-gray-500">Offer #${i} on:</div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-emerald-400 font-mono text-xs mt-1">Rate: ${Number(off[2])}% APR</div></div><button onclick="handleAcceptOffer(${i})" class="bg-emerald-600 text-white px-4 py-2 rounded text-xs font-bold">Accept Deal</button></div>`; } } } catch(e){} } div.innerHTML = html || '<p class="text-gray-500 text-xs text-center col-span-2">No offers received yet.</p>'; }
     function updateTimers() { document.querySelectorAll('[id^="timer_"]').forEach(el => { const end = Number(el.getAttribute("data-end")); const diff = end - Math.floor(Date.now()/1000); el.innerText = diff <= 0 ? "EXPIRED" : `${Math.floor(diff/60)}m ${diff%60}s`; }); }
 
     </script>
