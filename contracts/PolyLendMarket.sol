@@ -129,7 +129,6 @@ contract PolyLendMarket is ERC1155Holder, ReentrancyGuard {
 
         require(req.isLoan && req.isActive);
         
-        // 48h grace period if extension requested
         uint256 grace = ext.requested ? 48 hours : 0;
         require(block.timestamp > loan.startTime + loan.duration + grace);
 
