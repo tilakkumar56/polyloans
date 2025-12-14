@@ -166,9 +166,7 @@
             </div>
         </div>
 
-        <!-- ========================================== -->
-        <!-- TAB 3: LEND (Feed + Investments) -->
-        <!-- ========================================== -->
+        <!-- TAB 3: LEND -->
         <div id="view-lend" class="col-span-12 hidden-tab">
             <div class="space-y-6">
                 <!-- Market Feed -->
@@ -214,39 +212,48 @@
     </main>
 
     <script>
-    // ⚠️ CRITICAL: Ensure this is the contract you deployed
-    const MARKET_ADDR = "0x30672b8B427BD7277c8467221441e2D3Dbf833E4"; 
+    // --- 🚀 CONFIGURATION ---
+    const MARKET_ADDR = "0x30672b8B427BD7277c8467221441e2D3Dbf833E4"; // Ensure this is your deployed address
     const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
     const RENDER_API_URL = "https://polyloans-api.onrender.com"; 
 
-    let signer, userAddress, marketContract;
+    let signer, userAddress, marketContract, myProxy;
     const INFO_CACHE = {}; 
-    window.myProxy = null;
 
-    const MARKET_ABI = ["function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)","function makeOffer(uint256,uint256,uint256) external returns (uint256)","function acceptOffer(uint256) external","function repayLoan(uint256) external","function cancelRequest(uint256) external","function requestExtension(uint256,uint256) external","function acceptExtension(uint256) external","function buyoutLoan(uint256) external","function liquidateByTime(uint256) external","function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)","function loans(uint256) view returns (address, uint256, uint256, uint256)","function offers(uint256) view returns (uint256, address, uint256, bool)","function nextRequestId() view returns (uint256)","function nextOfferId() view returns (uint256)"];
+    // ABIs
+    const MARKET_ABI = ["function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)","function makeOffer(uint256,uint256,uint256) external returns (uint256)","function acceptOffer(uint256) external","function repayLoan(uint256) external","function cancelRequest(uint256) external","function requestExtension(uint256,uint256) external","function acceptExtension(uint256) external","function buyoutLoan(uint256) external","function liquidateByTime(uint256) external","function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)","function loans(uint256) view returns (address, uint256, uint256, uint256)","function offers(uint256) view returns (uint256, address, uint256, bool)","function extensions(uint256) view returns (bool, uint256, uint256)","function nextRequestId() view returns (uint256)","function nextOfferId() view returns (uint256)"];
     const USDC_ABI = ["function approve(address, uint256) external"];
 
     async function connectWallet() {
-        if (!window.ethereum) return alert("Install Rabby/MetaMask!");
-        
-        // Handle Wallet Providers
+        // WALLET FIX: Handle conflicts gracefully
         let ethProvider = window.ethereum;
+        if (!ethProvider) return alert("Install Rabby or MetaMask!");
+        
+        // Prefer Rabby if multiple are present
         if (window.ethereum.providers?.length) {
             ethProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum.providers[0];
         }
 
+        // FORCE POPUP
         try {
-            // Force Popup
             await ethProvider.request({ method: 'eth_requestAccounts' });
-            try { await ethProvider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] }); } catch(e){}
+        } catch(e) { return; }
 
-            const provider = new ethers.BrowserProvider(ethProvider);
+        const provider = new ethers.BrowserProvider(ethProvider);
+        
+        try {
+            const network = await provider.getNetwork();
+            if(Number(network.chainId) !== 137) {
+                await ethProvider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
+            }
+
             signer = await provider.getSigner();
             userAddress = await signer.getAddress();
             marketContract = new ethers.Contract(MARKET_ADDR, MARKET_ABI, signer);
             
-            // UI
-            document.getElementById("addrText").innerText = userAddress.slice(0,6) + "..." + userAddress.slice(-4);
+            // UI Updates
+            const shortAddr = userAddress.slice(0,6) + "..." + userAddress.slice(-4);
+            document.getElementById("addrText").innerText = shortAddr;
             document.getElementById("userAddr").classList.remove("hidden");
             document.getElementById("userAddr").classList.add("flex");
             document.getElementById("btnConnect").style.display = "none";
@@ -255,128 +262,78 @@
             switchTab('overview');
             await initProxy();
             scanPortfolio(); loadMarketFeed(); loadMyOffers(); loadMyLoans();
-            setInterval(updateTimers, 1000);
+            setInterval(updateTimers, 2000);
 
-        } catch(e) { console.error(e); }
+        } catch(e) { console.error(e); alert("Connection Error: " + e.message); }
     }
 
     function switchTab(t) {
         ['overview','borrow','lend'].forEach(v => {
             document.getElementById(`view-${v}`).classList.add('hidden-tab');
             document.getElementById(`tab-${v}`).classList.remove('tab-active');
-            document.getElementById(`tab-${v}`).classList.remove('text-white');
-            document.getElementById(`tab-${v}`).classList.add('text-gray-500');
         });
         document.getElementById(`view-${t}`).classList.remove('hidden-tab');
-        const btn = document.getElementById(`tab-${t}`);
-        btn.classList.add('tab-active');
-        btn.classList.add('text-white');
-        btn.classList.remove('text-gray-500');
+        document.getElementById(`tab-${t}`).classList.add('tab-active');
     }
 
-    // --- DATA FETCHING & LOGIC ---
-    async function initProxy() {
-        try { 
-            const r = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); 
-            const d = await r.json(); 
-            window.myProxy = d.proxy ? d.proxy.toLowerCase() : null; 
-        } catch(e){}
+    // --- 🔐 SIGNATURE LOGIC ---
+    async function signAndRelay(func, args) {
+        try {
+            const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
+            const meta = await nonceRes.json();
+            if(!meta.proxy) return alert("No Proxy Found");
+
+            const iface = new ethers.Interface(MARKET_ABI);
+            const data = iface.encodeFunctionData(func, args);
+            
+            const domain = { verifyingContract: meta.proxy, chainId: 137 };
+            const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
+            const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
+
+            const sig = await signer.signTypedData(domain, types, message);
+            const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: MARKET_ADDR, data, signature: sig }) });
+            
+            const json = await res.json();
+            if(!json.success) throw new Error(json.error);
+            return json.txHash;
+        } catch(e) { alert("Error: " + e.message); return null; }
     }
 
-    async function loadData() {
-        loadMarketFeed();
-        loadMyOffers();
-        loadMyLoans();
-    }
-
-    async function loadMarketFeed() {
-        const tbody = document.getElementById("marketFeed");
-        const nextId = await marketContract.nextRequestId();
-        let html = "";
+    async function handleCreateRequest() {
+        const id = document.getElementById("b_tokenId").value;
+        const sh = document.getElementById("b_shares").value;
+        const pr = document.getElementById("b_principal").value;
+        const dur = document.getElementById("b_duration").value;
         
-        for(let i=Number(nextId)-1; i>=1; i--) {
-            try {
-                const req = await marketContract.requests(i);
-                // Active, Not Loan, and NOT MINE
-                const isMine = (req[0].toLowerCase() === window.myProxy);
-                
-                if(req[5] && !req[6] && !isMine) {
-                    const info = await getInfo(req[1]);
-                    html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a></td><td class="p-4 text-right text-emerald-400 font-mono">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right text-white font-mono">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right"><div class="flex gap-2 justify-end"><input id="rate_${i}" placeholder="APR%" class="input-premium w-12 text-center text-xs p-1 rounded"><button class="bg-brand px-3 py-1 rounded text-xs text-white" onclick="makeOffer(${i})">Offer</button></div></td></tr>`;
-                }
-            } catch(e){}
-        }
-        tbody.innerHTML = html || '<tr><td colspan="5" class="p-8 text-center text-gray-500">No requests found.</td></tr>';
-    }
-
-    async function loadMyOffers() {
-        const div = document.getElementById("borrowerOffers");
-        const nextId = await marketContract.nextOfferId();
-        let html = "";
-        for(let i=Number(nextId)-1; i>=1; i--) {
-            try {
-                const off = await marketContract.offers(i);
-                if(off[3]) {
-                    const req = await marketContract.requests(off[0]);
-                    // Check if I am the borrower (Proxy)
-                    if(req[0].toLowerCase() === window.myProxy) {
-                        const info = await getInfo(req[1]);
-                        html += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] flex justify-between items-center"><div><div class="text-xs text-gray-500">Offer #${i} on:</div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-emerald-400 font-mono text-xs mt-1">Rate: ${Number(off[2])}% APR</div></div><button onclick="handleAcceptOffer(${i})" class="bg-emerald-600 text-white px-4 py-2 rounded text-xs font-bold">Accept Deal</button></div>`;
-                    }
-                }
-            } catch(e){}
-        }
-        div.innerHTML = html || '<p class="text-gray-500 text-xs text-center col-span-2">No offers received yet.</p>';
-    }
-
-    async function loadMyLoans() {
-        const bDiv = document.getElementById("borrowerLoans");
-        const lDiv = document.getElementById("lenderLoans");
-        const nextId = await marketContract.nextRequestId();
-        let bHtml="", lHtml="", borrowed=0, lent=0, count=0;
-
-        for(let i=1; i<Number(nextId); i++) {
-            try {
-                const req = await marketContract.requests(i);
-                const loan = await marketContract.loans(i);
-                
-                // ACTIVE LOAN
-                if(req[6]) { 
-                    const info = await getInfo(req[1]);
-                    const princ = Number(ethers.formatUnits(req[3],6));
-                    const end = Number(loan[1]) + Number(loan[3]);
-
-                    // I am Borrower (Proxy)
-                    if(req[0].toLowerCase() === window.myProxy) {
-                        borrowed += princ; count++;
-                        bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs bg-red-900 text-red-200 px-2 py-0.5 rounded" id="timer_${i}" data-end="${end}">...</span></div><div class="text-xs text-gray-400">Owed: $${princ} + Interest</div><button onclick="handleRepay(${i})" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded font-bold text-xs mt-3">Repay Loan</button></div>`;
-                    }
-                    
-                    // I am Lender (Wallet)
-                    if(loan[0].toLowerCase() === userAddress.toLowerCase()) {
-                        lent += princ; count++;
-                        lHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs text-brand">Active</span></div><div class="text-xs text-gray-400">Lent: $${princ} @ ${Number(loan[2])}%</div><button onclick="handleLiquidate(${i})" class="w-full bg-red-900/50 hover:bg-red-900 text-red-300 py-2 rounded text-xs mt-3 border border-red-800">Seize (If Expired)</button></div>`;
-                    }
-                } 
-                // PENDING REQUEST (Mine)
-                else if (req[5] && !req[6] && req[0].toLowerCase() === window.myProxy) {
-                    const info = await getInfo(req[1]);
-                    bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] opacity-70"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs text-orange-400 border border-orange-400/30 px-2 rounded">Pending</span></div><button onclick="handleCancelRequest(${i})" class="w-full border border-red-900 text-red-400 py-2 rounded text-xs hover:bg-red-900/20">Cancel Request</button></div>`;
-                }
-            } catch(e){}
-        }
+        const status = document.getElementById("b_status");
+        status.innerText = "⏳ Please Sign...";
         
-        bDiv.innerHTML = bHtml || '<p class="text-gray-500 text-sm text-center">No active debts.</p>';
-        lDiv.innerHTML = lHtml || '<p class="text-gray-500 text-sm text-center col-span-2">No investments.</p>';
-        document.getElementById("statBorrowed").innerText = `$${borrowed.toFixed(2)}`;
-        document.getElementById("statLent").innerText = `$${lent.toFixed(2)}`;
-        document.getElementById("statCount").innerText = count;
+        const tx = await signAndRelay('createRequest', [id, BigInt(Math.floor(sh*1e6)), BigInt(Math.floor(pr*1e6)), BigInt(dur*60)]);
+        if(tx) { status.innerHTML = `<span class="text-emerald-400">✅ Posted!</span>`; setTimeout(loadMarketFeed, 4000); }
+        else { status.innerText = "❌ Failed"; }
     }
 
-    async function getInfo(id) {
-        if(INFO_CACHE[id]) return INFO_CACHE[id];
-        try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const data = await res.json(); 
-        const info = { title: data.title || "Unknown Market", link: data.slug ? `https://polymarket.com/event/${data.slug}` : "#" }; INFO_CACHE[id] = info; return info; } catch { return {title:"Unknown", link:"#"}; }
+    async function handleAcceptOffer(offerId) {
+        if(!confirm("Accept Offer?")) return;
+        if(await signAndRelay('acceptOffer', [offerId])) { alert("✅ Deal Active!"); location.reload(); }
+    }
+
+    async function handleRepay(requestId) {
+        if(!confirm("Repay Loan?")) return;
+        if(await signAndRelay('repayLoan', [requestId])) { alert("✅ Repaid!"); location.reload(); }
+    }
+
+    async function handleCancelRequest(requestId) {
+        if(!confirm("Cancel Request?")) return;
+        if(await signAndRelay('cancelRequest', [requestId])) { alert("✅ Request Cancelled!"); location.reload(); }
+    }
+
+    // HELPERS
+    async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy; }catch(e){} }
+    async function getMarketInfo(tokenId) {
+        if(INFO_CACHE[tokenId]) return INFO_CACHE[tokenId];
+        try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${tokenId}`); const data = await res.json(); 
+        const info = { title: data.title || "Unknown Market", link: data.slug ? `https://polymarket.com/event/${data.slug}` : "#" }; INFO_CACHE[tokenId] = info; return info; } catch { return {title:"Unknown", link:"#"}; }
     }
     async function scanPortfolio() {
         const select = document.getElementById("positionSelect");
@@ -404,45 +361,91 @@
         else { document.getElementById("ltvWarning").innerText = "LTV OK"; document.getElementById("btnCreate").disabled = false; }
     }
 
-    async function signAndRelay(func, args) {
-        try {
-            const metaRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
-            const meta = await metaRes.json();
-            if(!meta.proxy) return alert("No Proxy Found");
-            const iface = new ethers.Interface(MARKET_ABI);
-            const data = iface.encodeFunctionData(func, args);
-            const domain = { verifyingContract: meta.proxy, chainId: 137 };
-            const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
-            const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
-            const sig = await signer.signTypedData(domain, types, message);
-            const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: MARKET_ADDR, data, signature: sig }) });
-            const json = await res.json();
-            if(!json.success) throw new Error(json.error);
-            return json.txHash;
-        } catch(e) { alert("Error: " + e.message); return null; }
-    }
-
-    async function handleCreateRequest() {
-        const id = document.getElementById("b_tokenId").value;
-        const s = document.getElementById("b_shares").value;
-        const p = document.getElementById("b_principal").value;
-        const d = document.getElementById("b_duration").value;
-        document.getElementById("b_status").innerText = "⏳ Signing...";
-        const tx = await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), BigInt(d*60)]);
-        if(tx) { document.getElementById("b_status").innerText = "✅ Posted!"; setTimeout(loadData, 2000); }
-        else { document.getElementById("b_status").innerText = "❌ Failed"; }
+    // LOADERS
+    async function loadMarketFeed() {
+        const tbody = document.getElementById("marketFeed");
+        const nextId = await marketContract.nextRequestId();
+        let html = "";
+        for(let i=Number(nextId)-1; i>=1; i--) {
+            try {
+                const req = await marketContract.requests(i);
+                const isMine = req[0].toLowerCase() === window.myProxy?.toLowerCase();
+                if(req[5] && !req[6] && !isMine) {
+                    const info = await getInfo(req[1]);
+                    html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a></td><td class="p-4 text-right text-emerald-400 font-mono">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right text-white font-mono">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right"><div class="flex gap-2 justify-end"><input id="rate_${i}" placeholder="%" class="input-premium w-12 text-center text-xs p-1 rounded"><button class="bg-brand px-3 py-1 rounded text-xs text-white" onclick="makeOffer(${i})">Offer</button></div></td></tr>`;
+                }
+            } catch(e){}
+        }
+        tbody.innerHTML = html || '<tr><td colspan="5" class="p-8 text-center text-gray-500">No requests found.</td></tr>';
     }
     async function makeOffer(id) {
         const r = document.getElementById("rate_"+id).value;
-        const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
-        await(await usdc.approve(MARKET_ADDR, ethers.MaxUint256)).wait();
+        const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+        await(await u.approve(MARKET_ADDR,ethers.MaxUint256)).wait();
         await(await marketContract.makeOffer(id, Number(r))).wait();
-        alert("Offer Sent!"); loadData();
+        alert("Offer Sent!"); loadMarketFeed();
     }
-    async function handleAcceptOffer(id) { if(confirm("Accept Deal?")) if(await signAndRelay("acceptOffer", [id])) alert("Deal Active!"); }
-    async function handleRepay(id) { if(confirm("Repay Loan?")) if(await signAndRelay("repayLoan", [id])) alert("Repaid!"); }
-    async function handleCancelRequest(id) { if(confirm("Cancel Request?")) if(await signAndRelay("cancelRequest", [id])) alert("Cancelled!"); }
-    async function handleLiquidate(id) { if(confirm("Seize Assets?")) try{ await(await marketContract.liquidateByTime(id)).wait(); alert("Seized!"); }catch(e){alert(e.message);} }
+
+    async function loadMyOffers() {
+        const div = document.getElementById("borrowerOffers");
+        const nextId = await marketContract.nextOfferId();
+        let html = "";
+        for(let i=Number(nextId)-1; i>=1; i--) {
+            try {
+                const off = await marketContract.offers(i);
+                if(off[3]) {
+                    const req = await marketContract.requests(off[0]);
+                    if(req[0].toLowerCase() === window.myProxy?.toLowerCase() && req[5]) {
+                        const info = await getInfo(req[1]);
+                        html += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] flex justify-between items-center"><div><div class="text-xs text-gray-500">Offer #${i} on:</div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-emerald-400 font-mono text-xs mt-1">Rate: ${Number(off[2])}% APR</div></div><button onclick="handleAcceptOffer(${i})" class="bg-emerald-600 text-white px-4 py-2 rounded text-xs font-bold">Accept Deal</button></div>`;
+                    }
+                }
+            } catch(e){}
+        }
+        div.innerHTML = html || '<p class="text-gray-500 text-xs text-center col-span-2">No offers received yet.</p>';
+    }
+
+    async function loadMyLoans() {
+        const bDiv = document.getElementById("borrowerLoans");
+        const lDiv = document.getElementById("lenderLoans");
+        const nextId = await marketContract.nextRequestId();
+        let bHtml="", lHtml="", borrowed=0, lent=0, count=0;
+        
+        if(!window.myProxy) await initProxy();
+        const myProxy = window.myProxy?.toLowerCase();
+
+        for(let i=1; i<Number(nextId); i++) {
+            try {
+                const req = await marketContract.requests(i);
+                const loan = await marketContract.loans(i);
+                
+                if(req[6]) { 
+                    const info = await getInfo(req[1]);
+                    const princ = Number(ethers.formatUnits(req[3],6));
+                    const end = Number(loan[1]) + Number(loan[3]);
+
+                    if(req[0].toLowerCase() === myProxy) {
+                        borrowed += princ; count++;
+                        bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs bg-emerald-900 text-emerald-200 px-2 py-0.5 rounded">Active</span></div><div class="text-xs text-gray-400">Owed: $${princ} + Interest</div><button onclick="handleRepay(${i})" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded font-bold text-xs mt-3">Repay Loan</button></div>`;
+                    }
+                    if(loan[0].toLowerCase() === userAddress.toLowerCase()) {
+                        lent += princ; count++;
+                        lHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs text-brand">Active</span></div><div class="text-xs text-gray-400">Lent: $${princ} @ ${Number(loan[2])}%</div><button onclick="handleLiquidate(${i})" class="w-full bg-red-900/50 hover:bg-red-900 text-red-300 py-2 rounded text-xs mt-3 border border-red-800">Seize (If Expired)</button></div>`;
+                    }
+                } else if (req[5] && req[0].toLowerCase() === myProxy) {
+                    const info = await getInfo(req[1]);
+                    bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] opacity-70"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs text-orange-400 border border-orange-400/30 px-2 rounded">Pending</span></div><button onclick="handleCancelRequest(${i})" class="w-full border border-red-900 text-red-400 py-2 rounded text-xs hover:bg-red-900/20">Cancel Request</button></div>`;
+                }
+            } catch(e){}
+        }
+        
+        bDiv.innerHTML = bHtml || '<p class="text-gray-500 text-sm text-center">No active debts.</p>';
+        lDiv.innerHTML = lHtml || '<p class="text-gray-500 text-sm text-center col-span-2">No investments.</p>';
+        document.getElementById("statBorrowed").innerText = `$${borrowed.toFixed(2)}`;
+        document.getElementById("statLent").innerText = `$${lent.toFixed(2)}`;
+        document.getElementById("statCount").innerText = count;
+    }
+    
     function updateTimers() {
         document.querySelectorAll('[id^="timer_"]').forEach(el => {
             const end = Number(el.getAttribute("data-end"));
@@ -450,6 +453,9 @@
             el.innerText = diff <= 0 ? "EXPIRED" : `${Math.floor(diff/60)}m ${diff%60}s`;
         });
     }
+    
+    async function handleLiquidate(id) { try{ await(await marketContract.liquidateByTime(id)).wait(); alert("Seized!"); location.reload(); }catch(e){alert(e.message);} }
+
     </script>
 </body>
 </html>
