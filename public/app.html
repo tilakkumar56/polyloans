@@ -2,8 +2,8 @@
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
-    <title>PolyLoans | DeFi Terminal</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolyLoans | DeFi Terminal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -20,6 +20,7 @@
         .hidden-tab { display: none !important; }
         .tab-active { border-bottom: 2px solid #6366F1; color: white; font-weight: bold; }
         .tab-btn { color: #6B7280; border-bottom: 2px solid transparent; padding-bottom: 4px; }
+        #debugLog { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #00ff00; height: 150px; overflow-y: scroll; background: #000; border: 1px solid #333; padding: 10px; margin-top: 20px; display: none; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -33,7 +34,7 @@
                 <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active">Overview</button>
                 <button onclick="switchTab('borrow')" id="tab-borrow" class="tab-btn">Borrow</button>
                 <button onclick="switchTab('lend')" id="tab-lend" class="tab-btn">Lend</button>
-                <button onclick="switchTab('debug')" id="tab-debug" class="tab-btn text-red-400">🐞 Debug</button>
+                <button onclick="toggleDebug()" class="text-xs text-red-500 ml-4">🐞 Logs</button>
             </div>
         </div>
         <div class="flex items-center gap-4">
@@ -47,7 +48,6 @@
 
     <main class="flex-1 p-8 grid grid-cols-1 gap-6 max-w-7xl mx-auto w-full">
 
-        <!-- 1. OVERVIEW -->
         <div id="view-overview" class="space-y-6">
             <h2 class="text-xl font-bold text-white">Dashboard</h2>
             <div class="grid grid-cols-4 gap-6">
@@ -58,42 +58,28 @@
             </div>
         </div>
 
-        <!-- 2. BORROW (RESTORED LTV & BALANCE) -->
         <div id="view-borrow" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-4 panel rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-brand"></span> New Loan Request</h2>
                 
-                <!-- ASSET SELECTOR -->
                 <div>
                     <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Collateral Asset</label>
                     <select id="positionSelect" onchange="autoFillForm()" class="input-prem w-full rounded-xl px-4 py-3 text-sm cursor-pointer appearance-none">
-                        <option>-- Connect Wallet First --</option>
+                        <option>Scanning...</option>
                     </select>
-                    <!-- RESTORED: Balance & Price Display -->
                     <div id="balanceDisplay" class="mt-2 text-xs font-mono text-emerald-400 font-bold h-5"></div>
                 </div>
 
                 <input type="text" id="b_tokenId" class="hidden">
 
-                <!-- INPUTS -->
                 <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Lock Shares</label>
-                        <input type="number" id="b_shares" placeholder="0.00" class="input-prem w-full rounded-xl px-4 py-3 text-sm font-mono" oninput="checkLTV()">
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Get USDC</label>
-                        <input type="number" id="b_principal" placeholder="0.00" class="input-prem w-full rounded-xl px-4 py-3 text-sm font-mono" oninput="checkLTV()">
-                    </div>
+                    <div><label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Lock Shares</label><input type="number" id="b_shares" placeholder="0.00" class="input-prem w-full rounded-xl px-4 py-3 text-sm font-mono" oninput="checkLTV()"></div>
+                    <div><label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Get USDC</label><input type="number" id="b_principal" placeholder="0.00" class="input-prem w-full rounded-xl px-4 py-3 text-sm font-mono" oninput="checkLTV()"></div>
                 </div>
 
-                <!-- RESTORED: LTV WARNING -->
                 <div id="ltvWarning" class="text-xs h-5 font-mono text-right font-bold"></div>
 
-                <div>
-                    <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Duration (Minutes)</label>
-                    <input type="number" id="b_duration" class="input-prem w-full rounded-xl px-4 py-3 text-sm font-mono" placeholder="e.g. 60">
-                </div>
+                <div><label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Duration (Minutes)</label><input type="number" id="b_duration" class="input-prem w-full rounded-xl px-4 py-3 text-sm font-mono" placeholder="e.g. 60"></div>
 
                 <button id="btnCreate" onclick="handleCreateRequest()" disabled class="w-full btn-brand py-4 rounded-xl text-sm font-bold mt-2">Sign & Post</button>
                 <div id="b_status" class="text-center text-xs mt-3 text-gray-500 font-mono"></div>
@@ -105,25 +91,14 @@
             </div>
         </div>
 
-        <!-- 3. LEND -->
         <div id="view-lend" class="hidden-tab space-y-6">
             <div class="panel rounded-xl overflow-hidden p-4"><h2 class="font-bold text-white mb-4">Market Feed</h2><div id="marketFeed" class="space-y-2"></div></div>
             <div class="panel rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Investments</h3><div id="lenderLoans" class="space-y-2"></div></div>
         </div>
 
-        <!-- 4. DEBUG (NEW) -->
-        <div id="view-debug" class="hidden-tab space-y-6">
-            <div class="panel rounded-xl p-6 space-y-4 font-mono text-xs">
-                <h2 class="text-lg font-bold text-red-400">🐞 System Diagnostics</h2>
-                <div><strong>Wallet:</strong> <span id="debugWallet" class="text-gray-400">...</span></div>
-                <div><strong>Proxy:</strong> <span id="debugProxy" class="text-gray-400">...</span></div>
-                <div><strong>Market Contract:</strong> <span id="debugContract" class="text-blue-400">...</span></div>
-                <div><strong>Server Status:</strong> <span id="debugServer" class="text-gray-400">Checking...</span></div>
-                <button onclick="location.reload()" class="bg-red-900/50 border border-red-500 text-white px-4 py-2 rounded">Force Reload</button>
-            </div>
-        </div>
-
     </main>
+
+    <div id="debugLog"><strong>DEBUG LOG STARTED...</strong><br></div>
 
     <script>
     const MARKET_ADDR = "0x30672b8B427BD7277c8467221441e2D3Dbf833E4"; 
@@ -134,12 +109,19 @@
     const INFO_CACHE = {}; 
 
     // ABIs
-    const MARKET_ABI = ["function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)","function makeOffer(uint256,uint256,uint256) external returns (uint256)","function acceptOffer(uint256) external","function repayLoan(uint256) external","function cancelRequest(uint256) external","function requestExtension(uint256,uint256) external","function acceptExtension(uint256) external","function buyoutLoan(uint256) external","function liquidateByTime(uint256) external","function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)","function loans(uint256) view returns (address, uint256, uint256, uint256)","function offers(uint256) view returns (uint256, address, uint256, bool)","function nextRequestId() view returns (uint256)","function nextOfferId() view returns (uint256)"];
+    const MARKET_ABI = ["function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)","function makeOffer(uint256,uint256,uint256) external returns (uint256)","function acceptOffer(uint256) external","function repayLoan(uint256) external","function cancelRequest(uint256) external","function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)","function loans(uint256) view returns (address, uint256, uint256, uint256)","function offers(uint256) view returns (uint256, address, uint256, bool)","function nextRequestId() view returns (uint256)","function nextOfferId() view returns (uint256)"];
     const USDC_ABI = ["function approve(address, uint256) external"];
+
+    function log(msg) {
+        console.log(msg);
+        const d = document.getElementById("debugLog");
+        d.innerHTML += `> ${msg}<br>`;
+        d.scrollTop = d.scrollHeight;
+    }
+    function toggleDebug() { document.getElementById("debugLog").style.display = document.getElementById("debugLog").style.display === "block" ? "none" : "block"; }
 
     async function connectWallet() {
         if(!window.ethereum) return alert("Install Rabby!");
-        
         try {
             await window.ethereum.request({ method: 'eth_requestAccounts' });
             try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] }); } catch(e){}
@@ -149,27 +131,25 @@
             userAddress = await signer.getAddress();
             marketContract = new ethers.Contract(MARKET_ADDR, MARKET_ABI, signer);
             
-            // UI Setup
             document.getElementById("addrText").innerText = userAddress.slice(0,6)+"...";
             document.getElementById("userAddr").classList.remove("hidden");
             document.getElementById("userAddr").classList.add("flex");
             document.getElementById("btnConnect").style.display = "none";
             document.getElementById("navTabs").classList.remove("hidden");
             
-            // Debug Info
-            document.getElementById("debugWallet").innerText = userAddress;
-            document.getElementById("debugContract").innerText = MARKET_ADDR;
-
+            log(`Connected: ${userAddress}`);
             switchTab('overview');
+            
             await initProxy();
-            scanPortfolio(); loadMarketFeed(); loadMyOffers(); loadMyLoans();
-            setInterval(() => { loadMarketFeed(); loadMyLoans(); }, 3000);
+            scanPortfolio(); loadData(); 
+            // Refresh data every 3s WITHOUT reloading page
+            setInterval(loadData, 3000);
 
-        } catch(e) { console.error(e); alert("Connection Error"); }
+        } catch(e) { log("Connect Error: " + e.message); }
     }
 
     function switchTab(t) {
-        ['overview','borrow','lend','debug'].forEach(v => {
+        ['overview','borrow','lend'].forEach(v => {
             document.getElementById(`view-${v}`).classList.add('hidden-tab');
             document.getElementById(`tab-${v}`).classList.remove('tab-active', 'text-white');
             document.getElementById(`tab-${v}`).classList.add('text-gray-500');
@@ -179,23 +159,15 @@
         document.getElementById(`tab-${t}`).classList.remove('text-gray-500');
     }
 
-    // --- PROXY INIT ---
     async function initProxy() {
         try {
             const r = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
             const d = await r.json();
             window.myProxy = d.proxy ? d.proxy.toLowerCase() : null;
-            
-            document.getElementById("debugProxy").innerText = window.myProxy || "Not Found";
-            document.getElementById("debugServer").innerText = "Online ✅";
-            document.getElementById("debugServer").classList.add("text-green-400");
-        } catch(e) {
-            document.getElementById("debugServer").innerText = "OFFLINE ❌";
-            document.getElementById("debugServer").classList.add("text-red-500");
-        }
+            log(`Proxy Found: ${window.myProxy}`);
+        } catch(e) { log("Proxy Error: " + e.message); }
     }
 
-    // --- SCAN PORTFOLIO ---
     async function scanPortfolio() {
         const select = document.getElementById("positionSelect");
         try {
@@ -213,10 +185,10 @@
                 select.appendChild(opt);
             });
             document.getElementById("statShares").innerText = data.length;
-        } catch(e) { select.innerHTML = '<option>⚠️ Error</option>'; }
+            log(`Loaded ${data.length} assets`);
+        } catch(e) { log("Scan Error"); }
     }
 
-    // --- RESTORED: Auto-Fill & LTV Logic ---
     function autoFillForm() {
         const sel = document.getElementById("positionSelect");
         if(sel.value) {
@@ -224,10 +196,7 @@
             document.getElementById("b_tokenId").value = opt.value;
             const bal = opt.getAttribute("data-bal");
             const price = Number(opt.getAttribute("data-price"));
-            const priceText = price === 0.5 ? "$0.50 (Est)" : `$${price.toFixed(2)}`;
-            
-            // SHOW THE BALANCE AND PRICE
-            document.getElementById("balanceDisplay").innerText = `Available: ${bal} Shares | Value: ${priceText}`;
+            document.getElementById("balanceDisplay").innerText = `Available: ${bal} | Price: $${price.toFixed(2)}`;
             checkLTV();
         }
     }
@@ -239,21 +208,93 @@
         
         if (opt && s > 0) {
             const price = Number(opt.getAttribute("data-price")) || 0.5;
-            const maxLoan = (s * price) * 0.50; // 50% LTV
+            const maxLoan = (s * price) * 0.50; 
             const warning = document.getElementById("ltvWarning");
             const btn = document.getElementById("btnCreate");
             
             if(p > maxLoan) {
-                warning.innerHTML = `<span class="text-red-500 font-bold">❌ Max Loan: $${maxLoan.toFixed(2)}</span>`;
+                warning.innerHTML = `<span class="text-red-500 font-bold">Max: $${maxLoan.toFixed(2)}</span>`;
                 btn.disabled = true;
             } else {
-                warning.innerHTML = `<span class="text-emerald-400 font-bold">✅ LTV Safe</span>`;
+                warning.innerHTML = `<span class="text-emerald-400 font-bold">LTV OK</span>`;
                 btn.disabled = false;
             }
         }
     }
 
-    // --- SIGNATURE LOGIC ---
+    // --- MAIN DATA LOADER ---
+    async function loadData() {
+        if(!marketContract) return;
+        const nextId = await marketContract.nextRequestId();
+        const nextOff = await marketContract.nextOfferId();
+        let feed="", bOffers="", bLoans="", lLoans="", count=0;
+
+        // LOAD REQUESTS
+        for(let i=Number(nextId)-1; i>=1; i--) {
+            try {
+                const req = await marketContract.requests(i);
+                // 🔥 STRICT FILTER: Hide Token ID 0
+                if (req[1] == 0n) continue;
+
+                if(!req[5] || req[6]) continue; // Skip inactive/loans for Feed
+                
+                // If MINE -> Show in My Debts (Pending)
+                if(isMe(req[0])) {
+                    const info = await getInfo(req[1]);
+                    bLoans += `<div class="bg-[#0B0D12] p-4 rounded border border-gray-800 opacity-70 mb-2"><div class="flex justify-between"><span class="font-bold text-sm text-white">${info.title}</span><span class="text-xs text-orange-400">Pending</span></div><button onclick="handleCancelRequest(${i})" class="w-full border border-red-900 text-red-400 py-2 rounded text-xs mt-2 hover:bg-red-900/20">Cancel Request</button></div>`;
+                } 
+                // If NOT MINE -> Show in Feed
+                else {
+                    const info = await getInfo(req[1]);
+                    feed += `<div class="bg-[#0B0D12] p-4 rounded border border-[#1E2129] flex justify-between items-center mb-2"><div><div class="font-bold text-sm text-white">${info.title}</div><div class="text-xs text-gray-500">Ask: $${ethers.formatUnits(req[3],6)}</div></div><div class="flex gap-2"><input id="r_${i}" placeholder="%" class="w-12 bg-black text-xs text-center border border-gray-800 rounded"><button onclick="makeOffer(${i})" class="bg-brand px-3 py-1 rounded text-xs text-white">Offer</button></div></div>`;
+                }
+            } catch(e){}
+        }
+
+        // LOAD LOANS (Active)
+        for(let i=1; i<Number(nextId); i++) {
+            try {
+                const req = await marketContract.requests(i);
+                const loan = await marketContract.loans(i);
+                if(req[1] == 0n) continue; // Filter ID 0
+
+                if(req[6]) {
+                    const info = await getInfo(req[1]);
+                    const princ = ethers.formatUnits(req[3],6);
+                    if(isMe(req[0])) {
+                        bLoans += `<div class="bg-[#0B0D12] p-4 rounded border border-gray-800 mb-2"><div class="flex justify-between"><span class="font-bold text-sm text-white">${info.title}</span><span class="text-xs text-green-400">Active</span></div><div class="text-xs text-gray-500 mt-1">Owed: $${princ}</div><button onclick="handleRepay(${i})" class="w-full bg-brand hover:bg-indigo-500 text-white py-2 rounded text-xs mt-2">Repay</button></div>`;
+                        count++;
+                    }
+                    if(isMe(loan[0])) {
+                        lLoans += `<div class="bg-[#0B0D12] p-4 rounded border border-gray-800 mb-2"><div class="font-bold text-sm">${info.title}</div><div class="text-xs text-green-400">Active Investment ($${princ})</div><button onclick="handleLiquidate(${i})" class="w-full border border-red-900 text-red-400 py-1 rounded text-xs mt-2">Seize (If Expired)</button></div>`;
+                    }
+                }
+            } catch(e){}
+        }
+
+        // LOAD OFFERS
+        for(let i=1; i<Number(nextOff); i++) {
+            try {
+                const off = await marketContract.offers(i);
+                if(off[3]) {
+                    const req = await marketContract.requests(off[0]);
+                    // Show offer if it's for ME, and valid
+                    if(isMe(req[0]) && req[5] && req[1] != 0n) {
+                        const info = await getInfo(req[1]);
+                        bOffers += `<div class="bg-[#0B0D12] p-4 rounded border border-green-900/50 mb-2"><div class="flex justify-between"><span class="font-bold text-sm text-white">${info.title}</span><span class="text-xs text-green-400">${Number(off[2])}% APR</span></div><button onclick="handleAcceptOffer(${i})" class="w-full bg-green-700 hover:bg-green-600 text-white py-2 rounded text-xs mt-2">Accept Offer</button></div>`;
+                    }
+                }
+            } catch(e){}
+        }
+
+        document.getElementById("marketFeed").innerHTML = feed || "No requests found.";
+        document.getElementById("borrowerLoans").innerHTML = bLoans || "No active debts.";
+        document.getElementById("borrowerOffers").innerHTML = bOffers || "No offers received.";
+        document.getElementById("lenderLoans").innerHTML = lLoans || "No investments.";
+        document.getElementById("statCount").innerText = count;
+    }
+
+    // --- ACTIONS (NO RELOAD) ---
     async function signAndRelay(func, args) {
         try {
             const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
@@ -262,9 +303,8 @@
 
             const iface = new ethers.Interface(MARKET_ABI);
             const data = iface.encodeFunctionData(func, args);
-            
             const domain = { verifyingContract: meta.proxy, chainId: 137 };
-            // Ensure safeTxGas is 0 in signature to match backend
+            // safeTxGas MUST be 0 to match
             const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
             const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
 
@@ -273,8 +313,9 @@
             
             const json = await res.json();
             if(!json.success) throw new Error(json.error);
+            log(`Success: ${json.txHash}`);
             return json.txHash;
-        } catch(e) { alert("Error: " + e.message); return null; }
+        } catch(e) { log("Error: " + e.message); alert("Transaction Error: Check logs"); return null; }
     }
 
     async function handleCreateRequest() {
@@ -283,100 +324,36 @@
         const p = document.getElementById("b_principal").value;
         const d = document.getElementById("b_duration").value;
         
-        if(!id || id === "0") return alert("Invalid Asset");
+        if(!id || id == "0") return alert("Invalid Asset");
 
         document.getElementById("b_status").innerText = "⏳ Signing...";
         const tx = await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), BigInt(d*60)]);
-        if(tx) { document.getElementById("b_status").innerHTML = `<span class="text-emerald-400">✅ Success!</span>`; setTimeout(() => location.reload(), 2000); }
-        else { document.getElementById("b_status").innerText = "❌ Failed"; }
+        if(tx) { 
+            document.getElementById("b_status").innerHTML = `<span class="text-emerald-400">✅ Success!</span>`; 
+            // REFRESH DATA WITHOUT RELOAD
+            await loadData();
+            await scanPortfolio(); 
+        } else {
+            document.getElementById("b_status").innerText = "❌ Failed"; 
+        }
     }
 
-    // [Rest of Loaders & Helpers preserved from previous version...]
+    async function makeOffer(id) { 
+        const r = document.getElementById("rate_"+id).value;
+        const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+        await(await u.approve(MARKET_ADDR,ethers.MaxUint256)).wait();
+        await(await marketContract.makeOffer(id, Number(r))).wait();
+        alert("Offer Sent!"); 
+        loadData(); // Refresh UI
+    }
+
+    async function handleAcceptOffer(id) { if(confirm("Accept Deal?")) if(await signAndRelay("acceptOffer", [id])) { alert("Deal Active!"); loadData(); } }
+    async function handleRepay(requestId) { if(confirm("Repay Loan?")) if(await signAndRelay("repayLoan", [requestId])) { alert("✅ Repaid!"); loadData(); scanPortfolio(); } }
+    async function handleCancelRequest(requestId) { if(confirm("Cancel Request?")) if(await signAndRelay("cancelRequest", [requestId])) { alert("✅ Cancelled!"); loadData(); scanPortfolio(); } }
+    async function handleLiquidate(id) { try{ await(await marketContract.liquidateByTime(id)).wait(); alert("Seized!"); loadData(); }catch(e){alert(e.message);} }
+
     async function getInfo(id) { if(INFO_CACHE[id]) return INFO_CACHE[id]; try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const data = await res.json(); const info = { title: data.title || "Unknown Market", link: data.slug ? `https://polymarket.com/event/${data.slug}` : "#" }; INFO_CACHE[id] = info; return info; } catch { return {title:"Unknown", link:"#"}; } }
-    
     function isMe(addr) { return addr && (addr.toLowerCase() === userAddress.toLowerCase() || (myProxy && addr.toLowerCase() === myProxy)); }
-
-    async function loadMarketFeed() {
-        const tbody = document.getElementById("marketFeed");
-        const nextId = await marketContract.nextRequestId();
-        let html = "";
-        for(let i=Number(nextId)-1; i>=1; i--) {
-            try {
-                const req = await marketContract.requests(i);
-                // Active, Not Loan, NOT Mine, NOT ID 0
-                if(req[5] && !req[6] && !isMe(req[0]) && req[1].toString() !== "0") {
-                    const info = await getInfo(req[1]);
-                    html += `<tr class="border-b border-[#1E2129] hover:bg-[#0B0D12]"><td class="p-4"><div class="font-bold text-white">${info.title}</div><a href="${info.link}" target="_blank" class="text-xs text-brand">View Market ↗</a></td><td class="p-4 text-right text-emerald-400">${ethers.formatUnits(req[2],6)}</td><td class="p-4 text-right text-white font-mono">$${ethers.formatUnits(req[3],6)}</td><td class="p-4 text-right text-gray-400">${(Number(req[4])/60).toFixed(0)}m</td><td class="p-4 text-right"><div class="flex gap-2 justify-end"><input id="rate_${i}" placeholder="%" class="input-premium w-12 text-center text-xs p-1 rounded"><button class="bg-brand px-3 py-1 rounded text-xs text-white" onclick="makeOffer(${i})">Offer</button></div></td></tr>`;
-                }
-            } catch(e){}
-        }
-        tbody.innerHTML = html || '<tr><td colspan="5" class="p-8 text-center text-gray-500">No requests found.</td></tr>';
-    }
-
-    async function loadMyOffers() {
-        const div = document.getElementById("borrowerOffers");
-        const nextId = await marketContract.nextOfferId();
-        let html = "";
-        for(let i=Number(nextId)-1; i>=1; i--) {
-            try {
-                const off = await marketContract.offers(i);
-                if(off[3]) {
-                    const req = await marketContract.requests(off[0]);
-                    if(isMe(req[0]) && req[5] && req[1].toString() !== "0") {
-                        const info = await getInfo(req[1]);
-                        html += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] flex justify-between items-center"><div><div class="text-xs text-gray-500">Offer #${i} on:</div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-emerald-400 font-mono text-xs mt-1">Rate: ${Number(off[2])}% APR</div></div><button onclick="handleAcceptOffer(${i})" class="bg-emerald-600 text-white px-4 py-2 rounded text-xs font-bold">Accept Deal</button></div>`;
-                    }
-                }
-            } catch(e){}
-        }
-        div.innerHTML = html || '<p class="text-gray-500 text-xs text-center col-span-2">No offers received yet.</p>';
-    }
-
-    async function loadMyLoans() {
-        const bDiv = document.getElementById("borrowerLoans");
-        const lDiv = document.getElementById("lenderLoans");
-        const nextId = await marketContract.nextRequestId();
-        let bHtml="", lHtml="", borrowed=0, lent=0, count=0;
-
-        for(let i=1; i<Number(nextId); i++) {
-            try {
-                const req = await marketContract.requests(i);
-                const loan = await marketContract.loans(i);
-                if (req[1].toString() === "0") continue;
-
-                if(req[6]) { // Active Loan
-                    const info = await getInfo(req[1]);
-                    const princ = Number(ethers.formatUnits(req[3],6));
-                    const end = Number(loan[1]) + Number(loan[3]);
-
-                    if(isMe(req[0])) {
-                        borrowed += princ; count++;
-                        bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs bg-emerald-900 text-emerald-200 px-2 py-0.5 rounded">Active</span></div><div class="text-xs text-gray-400">Owed: $${princ} + Interest</div><button onclick="handleRepay(${i})" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded font-bold text-xs mt-3">Repay Loan</button></div>`;
-                    }
-                    if(loan[0].toLowerCase() === userAddress.toLowerCase()) {
-                        lent += princ; count++;
-                        lHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129]"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs text-brand">Active</span></div><div class="text-xs text-gray-400">Lent: $${princ} @ ${Number(loan[2])}%</div><button onclick="handleLiquidate(${i})" class="w-full bg-red-900/50 hover:bg-red-900 text-red-300 py-2 rounded text-xs mt-3 border border-red-800">Seize (If Expired)</button></div>`;
-                    }
-                } 
-                else if (req[5] && !req[6] && isMe(req[0])) {
-                    // Pending
-                    const info = await getInfo(req[1]);
-                    bHtml += `<div class="bg-[#0B0D12] p-4 rounded-xl border border-[#1E2129] opacity-70"><div class="flex justify-between mb-2"><span class="font-bold text-white text-sm truncate w-48">${info.title}</span><span class="text-xs text-orange-400 border border-orange-400/30 px-2 rounded">Pending</span></div><button onclick="handleCancelRequest(${i})" class="w-full border border-red-900 text-red-400 py-2 rounded text-xs hover:bg-red-900/20">Cancel Request</button></div>`;
-                }
-            } catch(e){}
-        }
-        bDiv.innerHTML = bHtml || '<p class="text-gray-500 text-sm text-center">No active debts.</p>';
-        lDiv.innerHTML = lHtml || '<p class="text-gray-500 text-sm text-center col-span-2">No investments.</p>';
-        document.getElementById("statBorrowed").innerText = `$${borrowed.toFixed(2)}`;
-        document.getElementById("statLent").innerText = `$${lent.toFixed(2)}`;
-        document.getElementById("statCount").innerText = count;
-    }
-
-    async function makeOffer(id) { const r=document.getElementById("rate_"+id).value; const u=new ethers.Contract(USDC_ADDR,USDC_ABI,signer); await(await u.approve(MARKET_ADDR,ethers.MaxUint256)).wait(); await(await marketContract.makeOffer(id,Number(r))).wait(); alert("Offer Sent!"); loadMarketFeed(); }
-    async function handleAcceptOffer(id) { if(confirm("Accept Deal?")) if(await signAndRelay("acceptOffer", [id])) { alert("Deal Active!"); location.reload(); } }
-    async function handleRepay(requestId) { if(confirm("Repay Loan?")) if(await signAndRelay("repayLoan", [requestId])) { alert("✅ Repaid!"); location.reload(); } }
-    async function handleCancelRequest(requestId) { if(confirm("Cancel Request?")) if(await signAndRelay("cancelRequest", [requestId])) { alert("✅ Request Cancelled!"); location.reload(); } }
-    async function handleLiquidate(id) { try{ await(await marketContract.liquidateByTime(id)).wait(); alert("Seized!"); location.reload(); }catch(e){alert(e.message);} }
 
     </script>
 </body>
