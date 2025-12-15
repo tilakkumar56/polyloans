@@ -11,89 +11,84 @@
     <style>
         body{background:#020408;color:#E2E8F0}
         .hidden-tab{display:none!important}
-        .btn-primary{background:#6366F1;color:white;transition:0.2s}.btn-primary:hover{background:#4F46E5}
-        .btn-danger{background:#EF4444;color:white}.btn-danger:hover{background:#DC2626}
+        .btn-brand{background:#6366F1;color:white}.btn-brand:hover{background:#4F46E5}
+        /* Manual Input Toggle */
+        .manual-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #6366F1; cursor: pointer; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
 
     <nav class="h-20 border-b border-[#1E2129] flex items-center justify-between px-8 bg-[#020408]/90 backdrop-blur fixed w-full z-50">
         <div class="flex items-center gap-8"><span class="font-bold text-lg text-white">PolyLoans</span>
-            <div class="hidden flex gap-4 text-sm font-medium h-20 items-center">
-                <button onclick="switchTab('borrow')" id="tab-borrow" class="text-white border-b-2 border-brand h-full">Borrow</button>
+            <div id="navTabs" class="hidden flex gap-4 text-sm font-medium h-20 items-center">
+                <button onclick="switchTab('overview')" id="tab-overview" class="text-white border-b-2 border-brand h-full">Overview</button>
+                <button onclick="switchTab('borrow')" id="tab-borrow" class="text-gray-500 h-full">Borrow</button>
                 <button onclick="switchTab('lend')" id="tab-lend" class="text-gray-500 h-full">Lend</button>
             </div>
         </div>
-        <button id="btnConnect" onclick="connectWallet()" class="btn-primary px-4 py-2 rounded text-sm font-bold shadow-lg">Connect Wallet</button>
+        <button id="btnConnect" onclick="connectWallet()" class="btn-brand px-4 py-2 rounded text-sm font-bold shadow-lg">Connect Wallet</button>
         <div id="userAddr" class="hidden font-mono text-xs text-gray-400"></div>
     </nav>
 
     <main class="pt-28 p-8 max-w-7xl mx-auto w-full space-y-8">
 
-        <!-- 🚨 EMERGENCY KILL SWITCH 🚨 -->
-        <div class="bg-red-900/10 border border-red-900/50 rounded-xl p-4 flex items-center justify-between">
-            <div>
-                <h3 class="font-bold text-red-400 text-sm">⚠️ LOCKED SHARES NOT SHOWING?</h3>
-                <p class="text-xs text-gray-400">Enter the Request ID (start with 1, then 2...) to force unlock them.</p>
-            </div>
-            <div class="flex gap-2">
-                <input type="number" id="killId" placeholder="ID" class="bg-black border border-red-900/50 text-white px-3 py-1 rounded text-sm w-20">
-                <button onclick="forceKill()" class="btn-danger px-4 py-2 rounded text-sm font-bold">FORCE CANCEL</button>
+        <div id="view-overview" class="space-y-6">
+            <h2 class="text-xl font-bold">Dashboard</h2>
+            <div class="grid grid-cols-4 gap-6">
+                <div class="bg-surface border border-border p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase">My Debt</div><div class="text-2xl font-bold text-red-400" id="statBorrowed">$0.00</div></div>
+                <div class="bg-surface border border-border p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase">My Investments</div><div class="text-2xl font-bold text-emerald-400" id="statLent">$0.00</div></div>
+                <div class="bg-surface border border-border p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase">Active Deals</div><div class="text-2xl font-bold text-white" id="statCount">0</div></div>
+                <div class="bg-surface border border-border p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase">Positions</div><div class="text-2xl font-bold text-brand" id="statShares">0</div></div>
             </div>
         </div>
 
-        <!-- BORROW TAB -->
-        <div id="view-borrow" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div id="view-borrow" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
             
-            <!-- CREATE FORM -->
-            <div class="lg:col-span-4 bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 space-y-5 h-fit">
+            <div class="lg:col-span-4 bg-surface border border-border rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white">New Loan Request</h2>
                 
                 <div>
                     <div class="flex justify-between mb-1">
-                        <label class="text-xs font-bold text-gray-500">Select Asset</label>
-                        <label class="text-[10px] flex items-center gap-1 text-brand cursor-pointer"><input type="checkbox" onchange="toggleManualInput(this)"> Manual Input</label>
+                        <label class="text-xs font-bold text-gray-500">Asset Selection</label>
+                        <label class="manual-toggle"><input type="checkbox" onchange="toggleManual(this)"> Manual Input</label>
                     </div>
-                    <select id="positionSelect" onchange="autoFillForm()" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none"><option value="">Scanning...</option></select>
-                    <input type="text" id="manualTokenId" placeholder="Paste Token ID" class="hidden w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none" oninput="document.getElementById('b_tokenId').value = this.value">
+                    
+                    <select id="positionSelect" onchange="autoFillForm()" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none">
+                        <option value="">Scanning...</option>
+                    </select>
+
+                    <input type="text" id="manualId" placeholder="Paste Token ID Here..." class="hidden w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none" oninput="document.getElementById('b_tokenId').value = this.value">
+                    
                     <div id="balanceDisplay" class="text-xs text-brand mt-1 h-4"></div>
                 </div>
 
                 <input type="text" id="b_tokenId" class="hidden"> 
 
                 <div class="grid grid-cols-2 gap-4">
-                    <div><label class="text-xs text-gray-500 block mb-1">Shares</label><input type="number" id="b_shares" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" oninput="checkLTV()"></div>
-                    <div><label class="text-xs text-gray-500 block mb-1">USDC</label><input type="number" id="b_principal" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" oninput="checkLTV()"></div>
+                    <div><label class="text-xs text-gray-500 block mb-1">Shares to Lock</label><input type="number" id="b_shares" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" oninput="checkLTV()"></div>
+                    <div><label class="text-xs text-gray-500 block mb-1">Get USDC</label><input type="number" id="b_principal" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" oninput="checkLTV()"></div>
                 </div>
                 
-                <div id="ltvWarning" class="text-xs h-4 text-right font-mono text-gray-500"></div>
+                <div id="ltvWarning" class="text-xs h-4 text-right"></div>
                 <div><label class="text-xs text-gray-500 block mb-1">Duration (Mins)</label><input type="number" id="b_duration" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" placeholder="60"></div>
 
-                <button onclick="handleCreateRequest()" id="btnCreate" disabled class="w-full btn-primary py-3 rounded font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed">Sign & Post</button>
+                <button onclick="handleCreateRequest()" id="btnCreate" disabled class="w-full btn-brand py-3 rounded font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed">Sign & Post</button>
                 <div id="b_status" class="text-center text-xs mt-2 text-gray-500 font-mono"></div>
             </div>
 
-            <!-- MY DEBTS & OFFERS -->
             <div class="lg:col-span-8 space-y-6">
-                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
-                    <div class="flex justify-between mb-4"><h3 class="font-bold text-white">My Active Debts (Pending & Live)</h3><button onclick="loadData()" class="text-xs text-brand">Refresh</button></div>
-                    <div id="borrowerLoans" class="space-y-3 text-sm text-gray-500">Scanning blockchain...</div>
-                </div>
-                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
-                    <h3 class="font-bold text-white mb-4">Incoming Offers</h3>
-                    <div id="borrowerOffers" class="space-y-3 text-sm text-gray-500">No offers received.</div>
-                </div>
+                <div class="bg-surface border border-border rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Active Debts</h3><div id="borrowerLoans" class="space-y-3 text-sm text-gray-500">No debts.</div></div>
+                <div class="bg-surface border border-border rounded-xl p-6"><h3 class="font-bold text-white mb-4">Incoming Offers</h3><div id="borrowerOffers" class="space-y-3 text-sm text-gray-500">No offers.</div></div>
             </div>
         </div>
 
-        <!-- LEND TAB -->
         <div id="view-lend" class="hidden-tab space-y-6">
-            <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
+            <div class="bg-surface border border-border rounded-xl p-6">
                 <div class="flex justify-between items-center mb-4"><h2 class="font-bold text-white">Market Feed</h2><button onclick="loadData()" class="text-xs text-brand">Refresh</button></div>
                 <div id="marketFeed" class="space-y-3 text-gray-500 text-sm">Loading...</div>
             </div>
+            <div class="bg-surface border border-border rounded-xl p-6"><h2 class="font-bold text-white">My Investments</h2><div id="lenderLoans" class="space-y-3 text-gray-500 mt-4">No investments.</div></div>
         </div>
-
     </main>
 
     <script>
@@ -103,8 +98,7 @@
 
     let signer, userAddress, marketContract, myProxy;
     const INFO_CACHE = {}; 
-
-    const MARKET_ABI = ["function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)","function makeOffer(uint256,uint256,uint256) external returns (uint256)","function acceptOffer(uint256) external","function repayLoan(uint256) external","function cancelRequest(uint256) external","function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)","function loans(uint256) view returns (address, uint256, uint256, uint256)","function offers(uint256) view returns (uint256, address, uint256, bool)","function nextRequestId() view returns (uint256)","function nextOfferId() view returns (uint256)"];
+    const MARKET_ABI = ["function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)","function makeOffer(uint256,uint256,uint256) external returns (uint256)","function acceptOffer(uint256) external","function repayLoan(uint256) external","function cancelRequest(uint256) external","function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)","function loans(uint256) view returns (address, uint256, uint256, uint256)","function offers(uint256) view returns (uint256, address, uint256, bool)","function nextRequestId() view returns (uint256)","function nextOfferId() view returns (uint256)","function liquidateByTime(uint256) external"];
     const USDC_ABI = ["function approve(address, uint256) external"];
 
     async function connectWallet() {
@@ -119,28 +113,15 @@
         document.getElementById("userAddr").innerText = userAddress;
         document.getElementById("userAddr").classList.remove("hidden");
         document.getElementById("btnConnect").style.display = "none";
+        document.getElementById("navTabs").classList.remove("hidden");
         
+        switchTab('overview');
         await initProxy();
-        scanPortfolio(); 
-        loadData(); 
-        setInterval(loadData, 4000);
+        scanPortfolio(); loadData(); setInterval(loadData, 4000);
     }
 
-    function isMe(addr) { 
-        if (!addr) return false;
-        const target = addr.toLowerCase();
-        return (target === userAddress.toLowerCase()) || (myProxy && target === myProxy); 
-    }
-    
-    function switchTab(t) { 
-        ['borrow','lend'].forEach(v => { 
-            document.getElementById(`view-${v}`).classList.add('hidden-tab'); 
-            document.getElementById(`tab-${v}`).classList.remove('border-brand','text-white'); 
-            document.getElementById(`tab-${v}`).classList.add('text-gray-500'); 
-        }); 
-        document.getElementById(`view-${t}`).classList.remove('hidden-tab'); 
-        document.getElementById(`tab-${t}`).classList.add('border-brand','text-white'); 
-    }
+    function isMe(addr) { return addr && (addr.toLowerCase() === userAddress.toLowerCase() || (myProxy && addr.toLowerCase() === myProxy)); }
+    function switchTab(t) { ['borrow','lend','overview'].forEach(v => { document.getElementById(`view-${v}`).classList.add('hidden-tab'); document.getElementById(`tab-${v}`).classList.remove('border-brand','text-white'); document.getElementById(`tab-${v}`).classList.add('text-gray-500'); }); document.getElementById(`view-${t}`).classList.remove('hidden-tab'); document.getElementById(`tab-${t}`).classList.add('border-brand','text-white'); }
 
     async function loadData() {
         const nextId = await marketContract.nextRequestId();
@@ -151,31 +132,16 @@
             try {
                 const req = await marketContract.requests(i);
                 
-                // 1. MY DEBTS: Show EVERYTHING (Including ID 0 Bugged Requests so you can cancel)
-                if (isMe(req[0])) { 
-                    const isBugged = (req[1].toString() === "0");
-                    const info = isBugged ? {title: "⚠️ INVALID ASSET (ID 0)"} : await getInfo(req[1]);
+                // FILTER ID 0 (The fake market)
+                if (req[1].toString() === "0") continue;
 
-                    if (req[5] && !req[6]) { // Pending
-                        bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608] flex justify-between items-center">
-                            <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-orange-400">Request #${i} (Pending)</div></div>
-                            <button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded hover:bg-red-900/20">Cancel Request</button>
-                        </div>`;
-                    } else if (req[6]) { // Active Loan
-                        bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] flex justify-between items-center">
-                            <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-green-400">Active Loan #${i}</div></div>
-                            <button onclick="handleRepay(${i})" class="bg-brand text-white text-xs px-3 py-1 rounded">Repay</button>
-                        </div>`;
-                    }
-                }
-
-                // 2. MARKET FEED: Hide mine, Hide ID 0
-                if (!isMe(req[0]) && req[5] && !req[6] && req[1].toString() !== "0") {
+                if (isMe(req[0])) { // Mine
                     const info = await getInfo(req[1]);
-                    feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] flex justify-between items-center">
-                        <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-gray-500">Ask: $${ethers.formatUnits(req[3],6)}</div></div>
-                        <div class="flex gap-2"><input id="r_${i}" placeholder="%" class="w-12 bg-black text-white text-center text-xs rounded border border-gray-700"><button onclick="makeOffer(${i})" class="bg-brand px-3 py-1 rounded text-xs text-white">Offer</button></div>
-                    </div>`;
+                    if (req[5] && !req[6]) bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608] flex justify-between items-center"><div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-orange-400">Pending</div></div><button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded">Cancel</button></div>`;
+                    else if (req[6]) bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608]"><div class="font-bold text-white text-sm">${info.title}</div><button onclick="handleRepay(${i})" class="w-full bg-brand text-white text-xs px-3 py-1 rounded mt-2">Repay</button></div>`;
+                } else if (!req[6] && req[5]) { // Feed
+                    const info = await getInfo(req[1]);
+                    feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] flex justify-between items-center"><div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-gray-500">Ask: $${ethers.formatUnits(req[3],6)}</div></div><div class="flex gap-2"><input id="r_${i}" placeholder="%" class="w-10 bg-black text-white text-center text-xs rounded border border-gray-700"><button onclick="makeOffer(${i})" class="bg-brand px-3 py-1 rounded text-xs text-white">Offer</button></div></div>`;
                 }
             } catch(e){}
         }
@@ -185,72 +151,31 @@
                 const off = await marketContract.offers(i);
                 if(off[3]) {
                     const req = await marketContract.requests(off[0]);
-                    if(isMe(req[0]) && req[5]) { 
+                    if(isMe(req[0]) && req[5]) {
                         const info = await getInfo(req[1]);
-                        bOffers += `<div class="p-4 border border-green-900 rounded bg-[#051005] flex justify-between items-center">
-                            <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-green-400">Offer #${i}: ${Number(off[2])}% APR</div></div>
-                            <button onclick="handleAcceptOffer(${i})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button>
-                        </div>`;
+                        bOffers += `<div class="p-4 border border-green-900 rounded bg-[#051005] flex justify-between items-center"><div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-green-400">Rate: ${Number(off[2])}%</div></div><button onclick="handleAcceptOffer(${i})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button></div>`;
                     }
                 }
             } catch(e){}
         }
 
         document.getElementById("marketFeed").innerHTML = feed || '<div class="text-center text-xs text-gray-500 py-4">No requests.</div>';
-        document.getElementById("borrowerLoans").innerHTML = bLoans || '<div class="text-center text-xs text-gray-500 py-4">No active debts.</div>';
-        document.getElementById("borrowerOffers").innerHTML = bOffers || '<div class="text-center text-xs text-gray-500 py-4">No offers received.</div>';
+        document.getElementById("borrowerLoans").innerHTML = bLoans || '<div class="text-center text-xs text-gray-500 py-4">No debts.</div>';
+        document.getElementById("borrowerOffers").innerHTML = bOffers || '<div class="text-center text-xs text-gray-500 py-4">No offers.</div>';
     }
 
-    async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy ? d.proxy.toLowerCase() : null; }catch(e){} }
-    async function getInfo(id) { if(INFO_CACHE[id]) return INFO_CACHE[id]; try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const d = await res.json(); INFO_CACHE[id]=d; return d; } catch{ return {title:"Unknown"}; } }
-    
-    async function scanPortfolio() {
-        const select = document.getElementById("positionSelect");
-        try {
-            const res = await fetch(`${RENDER_API_URL}/portfolio?user=${userAddress}`);
-            const data = await res.json();
-            if (data.length === 0) { select.innerHTML = '<option value="">No assets found</option>'; return; }
-            select.innerHTML = '<option value="">-- Select Asset --</option>';
-            data.forEach(p => {
-                const opt = document.createElement("option");
-                opt.value = p.asset; opt.setAttribute("data-bal", p.size); opt.setAttribute("data-price", p.livePrice);
-                opt.text = `${p.title} (${Number(p.size).toFixed(2)})`;
-                select.appendChild(opt);
-            });
-        } catch(e) { select.innerHTML = '<option>Error Scanning</option>'; }
-    }
-    
-    function toggleManualInput(cb) {
-        if(cb.checked) {
-            document.getElementById("positionSelect").classList.add("hidden");
-            document.getElementById("manualTokenId").classList.remove("hidden");
-            document.getElementById("b_tokenId").value = ""; 
-        } else {
-            document.getElementById("positionSelect").classList.remove("hidden");
-            document.getElementById("manualTokenId").classList.add("hidden");
-            autoFillForm();
-        }
-    }
-
-    function autoFillForm() { const sel = document.getElementById("positionSelect"); if(sel.value) { const opt = sel.selectedOptions[0]; document.getElementById("b_tokenId").value = opt.value; document.getElementById("balanceDisplay").innerText = `Bal: ${opt.getAttribute("data-bal")} | Price: $${Number(opt.getAttribute("data-price")).toFixed(2)}`; } }
-    function checkLTV() { const s = Number(document.getElementById("b_shares").value); const p = Number(document.getElementById("b_principal").value); const opt = document.getElementById("positionSelect").selectedOptions[0]; const price = opt ? Number(opt.getAttribute("data-price")) : 0.5; const limit = s * price * 0.5; if(p > limit) { document.getElementById("ltvWarning").innerText = `Max: $${limit.toFixed(2)}`; document.getElementById("btnCreate").disabled = true; } else { document.getElementById("ltvWarning").innerText = "LTV OK"; document.getElementById("btnCreate").disabled = false; } }
-    
     async function signAndRelay(func, args) {
         try {
-            const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
-            const meta = await nonceRes.json();
-            if(!meta.proxy) return alert("No Proxy Found");
-            const iface = new ethers.Interface(MARKET_ABI);
-            const data = iface.encodeFunctionData(func, args);
-            const domain = { verifyingContract: meta.proxy, chainId: 137 };
+            const prepRes = await fetch(`${RENDER_API_URL}/prepare-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ userAddress, funcName: func, args: args.map(String) }) });
+            const prep = await prepRes.json();
+            if(prep.error) throw new Error(prep.error);
             const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
-            const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
-            const sig = await signer.signTypedData(domain, types, message);
-            const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: MARKET_ADDR, data, signature: sig }) });
+            const sig = await signer.signTypedData({ verifyingContract: prep.proxy, chainId: 137 }, types, prep.message);
+            const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: prep.proxy, to: MARKET_ADDR, message: prep.message, signature: sig }) });
             const json = await res.json();
             if(!json.success) throw new Error(json.error);
             return json.txHash;
-        } catch(e) { alert("Error: " + e.message); return null; }
+        } catch(e) { alert(e.message); return null; }
     }
 
     async function handleCreateRequest() {
@@ -258,25 +183,36 @@
         const s = document.getElementById("b_shares").value;
         const p = document.getElementById("b_principal").value;
         const d = document.getElementById("b_duration").value;
-        if(!id || id == "0") return alert("Invalid Asset");
-        document.getElementById("b_status").innerText = "⏳ Signing...";
+        if(id === "0" || !id) return alert("Invalid ID");
+        document.getElementById("b_status").innerText = "Signing...";
         const tx = await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), BigInt(d*60)]);
-        if(tx) { document.getElementById("b_status").innerHTML = `<span class="text-green-400">✅ Posted!</span>`; setTimeout(loadData, 2000); }
+        if(tx) { document.getElementById("b_status").innerText = "Success!"; setTimeout(loadData, 2000); }
     }
 
-    async function makeOffer(id) { const r = document.getElementById("rate_"+id).value; const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer); await(await u.approve(MARKET_ADDR,ethers.MaxUint256)).wait(); await(await marketContract.makeOffer(id, Number(r))).wait(); alert("Offer Sent!"); loadData(); }
-    async function handleAcceptOffer(id) { if(confirm("Accept Deal?")) if(await signAndRelay("acceptOffer", [id])) { alert("Deal Active!"); location.reload(); } }
-    async function handleRepay(requestId) { if(confirm("Repay Loan?")) if(await signAndRelay("repayLoan", [requestId])) { alert("✅ Repaid!"); location.reload(); } }
-    async function handleCancelRequest(requestId) { if(confirm("Cancel Request?")) if(await signAndRelay("cancelRequest", [requestId])) { alert("✅ Cancelled!"); location.reload(); } }
-    
-    // 🔥 FORCE KILL TOOL
-    async function forceKill() {
-        const id = document.getElementById("killId").value;
-        if(confirm(`FORCE CANCEL #${id}?`)) {
-            const tx = await signAndRelay("cancelRequest", [id]);
-            if(tx) { alert("Executed!"); location.reload(); }
-        }
+    async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy ? d.proxy.toLowerCase() : null; }catch(e){} }
+    async function getInfo(id) { if(INFO_CACHE[id]) return INFO_CACHE[id]; try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const d = await res.json(); INFO_CACHE[id]=d; return d; } catch{ return {title:"Unknown"}; } }
+    async function scanPortfolio() {
+        const select = document.getElementById("positionSelect");
+        try {
+            const res = await fetch(`${RENDER_API_URL}/portfolio?user=${userAddress}`);
+            const data = await res.json();
+            select.innerHTML = '<option value="">-- Select Asset --</option>';
+            data.forEach(p => { const opt = document.createElement("option"); opt.value = p.asset; opt.text = `${p.title}`; opt.setAttribute("data-bal", p.size); opt.setAttribute("data-price", p.livePrice); select.appendChild(opt); });
+        } catch(e) {}
     }
+    
+    // 🔥 MANUAL INPUT TOGGLE
+    function toggleManual(cb) {
+        document.getElementById("positionSelect").style.display = cb.checked ? "none" : "block";
+        document.getElementById("manualId").style.display = cb.checked ? "block" : "none";
+    }
+    function autoFillForm() { const s=document.getElementById("positionSelect"); if(s.value){ const o=s.selectedOptions[0]; document.getElementById("b_tokenId").value=o.value; document.getElementById("balanceDisplay").innerText=`Bal: ${o.getAttribute("data-bal")} | $${Number(o.getAttribute("data-price")).toFixed(2)}`; checkLTV(); } }
+    function checkLTV() { document.getElementById("btnCreate").disabled = false; } 
+
+    async function makeOffer(id) { const r=document.getElementById("rate_"+id).value; const u=new ethers.Contract(USDC_ADDR,USDC_ABI,signer); await(await u.approve(MARKET_ADDR,ethers.MaxUint256)).wait(); await(await marketContract.makeOffer(id, Number(r))).wait(); alert("Sent!"); loadData(); }
+    async function handleAcceptOffer(id) { if(confirm("Accept?")) await signAndRelay("acceptOffer", [id]); }
+    async function handleRepay(id) { if(confirm("Repay?")) await signAndRelay("repayLoan", [id]); }
+    async function handleCancelRequest(id) { if(confirm("Cancel?")) await signAndRelay("cancelRequest", [id]); }
 
     </script>
 </body>
