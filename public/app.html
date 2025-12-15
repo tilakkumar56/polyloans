@@ -20,7 +20,6 @@
 </head>
 <body class="min-h-screen flex flex-col">
 
-    <!-- NAVBAR -->
     <nav class="h-20 border-b border-[#1E2129] flex items-center justify-between px-8 bg-[#020408]/90 backdrop-blur fixed w-full z-50">
         <div class="flex items-center gap-8"><span class="font-bold text-lg text-white">PolyLoans</span>
             <div class="hidden flex gap-4 text-sm font-medium h-20 items-center">
@@ -34,7 +33,6 @@
 
     <main class="pt-28 p-8 max-w-7xl mx-auto w-full space-y-8">
 
-        <!-- 🚨 EMERGENCY KILL SWITCH 🚨 -->
         <div class="bg-red-900/10 border border-red-900/50 rounded-xl p-4 flex items-center justify-between">
             <div>
                 <h3 class="font-bold text-red-400 text-sm">⚠️ EMERGENCY ZONE</h3>
@@ -46,10 +44,8 @@
             </div>
         </div>
 
-        <!-- BORROW TAB -->
         <div id="view-borrow" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
-            <!-- CREATE FORM -->
             <div class="lg:col-span-4 bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white">New Loan Request</h2>
                 
@@ -77,7 +73,6 @@
                     <div><label class="text-xs text-gray-500 block mb-1">USDC</label><input type="number" id="b_principal" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" oninput="checkLTV()"></div>
                 </div>
                 
-                <!-- RESTORED LTV WARNING -->
                 <div id="ltvWarning" class="text-xs h-4 text-right font-mono text-gray-500"></div>
 
                 <div><label class="text-xs text-gray-500 block mb-1">Duration (Mins)</label><input type="number" id="b_duration" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" placeholder="60"></div>
@@ -86,20 +81,19 @@
                 <div id="b_status" class="text-center text-xs mt-2 text-gray-500 font-mono"></div>
             </div>
 
-            <!-- MY DEBTS & OFFERS -->
             <div class="lg:col-span-8 space-y-6">
-                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
-                    <h3 class="font-bold text-white mb-4">My Active Debts</h3>
-                    <div id="borrowerLoans" class="space-y-3 text-sm text-gray-500">No active debts.</div>
-                </div>
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
                     <h3 class="font-bold text-white mb-4">Incoming Offers</h3>
                     <div id="borrowerOffers" class="space-y-3 text-sm text-gray-500">No offers received.</div>
                 </div>
+                
+                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
+                    <h3 class="font-bold text-white mb-4">My Active Debts (Loans Only)</h3>
+                    <div id="borrowerLoans" class="space-y-3 text-sm text-gray-500">No active debts.</div>
+                </div>
             </div>
         </div>
 
-        <!-- LEND TAB -->
         <div id="view-lend" class="hidden-tab space-y-6">
             <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
                 <div class="flex justify-between items-center mb-4">
@@ -107,6 +101,11 @@
                     <button onclick="loadData()" class="text-xs text-brand">Refresh</button>
                 </div>
                 <div id="marketFeed" class="space-y-3 text-gray-500 text-sm">Loading...</div>
+            </div>
+            
+            <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
+                <h3 class="font-bold text-white mb-4">My Investments</h3>
+                <div id="lenderLoans" class="space-y-3 text-sm text-gray-500">No investments.</div>
             </div>
         </div>
 
@@ -161,38 +160,51 @@
     async function loadData() {
         const nextId = await marketContract.nextRequestId();
         const nextOff = await marketContract.nextOfferId();
-        let feed="", bOffers="", bLoans="";
+        let feed="", bOffers="", bLoans="", lLoans="";
 
         for(let i=1; i<Number(nextId); i++) {
             try {
                 const req = await marketContract.requests(i);
                 
-                // STRICT: Hide ID 0
+                // FILTER ID 0 (The fake market)
                 if (req[1].toString() === "0") continue;
 
-                if(!req[5] || req[6]) continue;
-                
-                // MY DEBTS
-                if (isMe(req[0])) { 
+                // --- 1. ACTIVE LOANS (DEBTS) ---
+                if (req[6]) { // If Loan is Active
                     const info = await getInfo(req[1]);
-                    bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608] flex justify-between items-center">
-                        <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-orange-400">Pending #${i}</div></div>
-                        <button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded hover:bg-red-900/20">Cancel</button>
-                    </div>`;
+                    const princ = ethers.formatUnits(req[3],6);
+                    
+                    if (isMe(req[0])) { // My Debt
+                        bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] flex justify-between items-center">
+                            <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-green-400">Owed: $${princ}</div></div>
+                            <button onclick="handleRepay(${i})" class="bg-brand text-white text-xs px-3 py-1 rounded">Repay</button>
+                        </div>`;
+                    } else if (isMe((await marketContract.loans(i))[0])) { // My Investment
+                        lLoans += `<div class="p-4 border border-blue-900/50 rounded bg-[#050608]"><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-blue-400">Lent: $${princ}</div></div>`;
+                    }
                 }
 
-                // MARKET FEED (Hide mine)
-                if (!isMe(req[0])) {
+                // --- 2. PENDING REQUESTS (MARKET FEED) ---
+                else if (req[5]) { // If Request is Pending
                     const info = await getInfo(req[1]);
-                    feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] flex justify-between items-center">
-                        <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-gray-500">Ask: $${ethers.formatUnits(req[3],6)}</div></div>
-                        <div class="flex gap-2"><input id="r_${i}" placeholder="%" class="w-12 bg-black text-white text-center text-xs rounded border border-gray-700"><button onclick="makeOffer(${i})" class="bg-brand px-3 py-1 rounded text-xs text-white">Offer</button></div>
-                    </div>`;
+                    
+                    // Show ALL requests in Feed. Mine get "Cancel", Others get "Offer"
+                    if (isMe(req[0])) {
+                        feed += `<div class="p-4 border border-gray-700 rounded bg-[#050608] flex justify-between items-center opacity-75">
+                            <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-orange-400">Your Request</div></div>
+                            <button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded hover:bg-red-900/20">Cancel</button>
+                        </div>`;
+                    } else {
+                        feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] flex justify-between items-center">
+                            <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-gray-500">Ask: $${ethers.formatUnits(req[3],6)}</div></div>
+                            <div class="flex gap-2"><input id="r_${i}" placeholder="%" class="w-12 bg-black text-white text-center text-xs rounded border border-gray-700"><button onclick="makeOffer(${i})" class="bg-brand px-3 py-1 rounded text-xs text-white">Offer</button></div>
+                        </div>`;
+                    }
                 }
             } catch(e){}
         }
 
-        // OFFERS
+        // --- 3. OFFERS ---
         for(let i=1; i<Number(nextOff); i++) {
             try {
                 const off = await marketContract.offers(i);
@@ -201,7 +213,7 @@
                     if(isMe(req[0]) && req[5]) { 
                         const info = await getInfo(req[1]);
                         bOffers += `<div class="p-4 border border-green-900 rounded bg-[#051005] flex justify-between items-center">
-                            <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-green-400">Offer: ${Number(off[2])}% APR</div></div>
+                            <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-green-400">Offer #${i}: ${Number(off[2])}% APR</div></div>
                             <button onclick="handleAcceptOffer(${i})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button>
                         </div>`;
                     }
@@ -209,9 +221,10 @@
             } catch(e){}
         }
 
-        document.getElementById("marketFeed").innerHTML = feed || "No requests found.";
-        document.getElementById("borrowerLoans").innerHTML = bLoans || "No active debts.";
-        document.getElementById("borrowerOffers").innerHTML = bOffers || "No offers received.";
+        document.getElementById("marketFeed").innerHTML = feed || '<div class="text-center text-xs text-gray-500 py-4">No active requests in market.</div>';
+        document.getElementById("borrowerLoans").innerHTML = bLoans || '<div class="text-center text-xs text-gray-500 py-4">No active debts (Requests are in Lend Feed).</div>';
+        document.getElementById("borrowerOffers").innerHTML = bOffers || '<div class="text-center text-xs text-gray-500 py-4">No offers received.</div>';
+        document.getElementById("lenderLoans").innerHTML = lLoans || '<div class="text-center text-xs text-gray-500 py-4">No investments.</div>';
     }
 
     async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy ? d.proxy.toLowerCase() : null; }catch(e){} }
@@ -249,17 +262,14 @@
         } 
     }
     
-    // 🔥 RESTORED LTV CHECK
     function checkLTV() {
         const s = Number(document.getElementById("b_shares").value);
         const p = Number(document.getElementById("b_principal").value);
         const opt = document.getElementById("positionSelect").selectedOptions[0];
         
-        // If manual input or price fetch fail, default to 0.5 for safety calc
         const price = opt ? Number(opt.getAttribute("data-price")) : 0.50;
         const effectivePrice = price > 0 ? price : 0.50;
-
-        const limit = s * effectivePrice * 0.50; // 50% Limit
+        const limit = s * effectivePrice * 0.50; 
 
         const warn = document.getElementById("ltvWarning");
         const btn = document.getElementById("btnCreate");
@@ -308,7 +318,7 @@
 
         document.getElementById("b_status").innerText = "⏳ Signing...";
         const tx = await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), BigInt(d*60)]);
-        if(tx) { document.getElementById("b_status").innerHTML = `<span class="text-green-400">✅ Success!</span>`; setTimeout(loadData, 2000); }
+        if(tx) { document.getElementById("b_status").innerHTML = `<span class="text-green-400">✅ Posted! Check Lend Feed.</span>`; setTimeout(loadData, 2000); }
     }
 
     async function makeOffer(id) { const r = document.getElementById("rate_"+id).value; const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer); await(await u.approve(MARKET_ADDR,ethers.MaxUint256)).wait(); await(await marketContract.makeOffer(id, Number(r))).wait(); alert("Offer Sent!"); loadData(); }
