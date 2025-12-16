@@ -24,11 +24,7 @@
 <body class="min-h-screen flex flex-col">
 
     <nav class="h-20 border-b border-[#1E2129] flex items-center justify-between px-8 bg-[#020408]/90 backdrop-blur fixed w-full z-50">
-        <div class="flex items-center gap-8">
-            <a href="/" class="flex items-center gap-2 font-bold text-lg text-white">
-                <span class="text-brand">▲</span> PolyLoans
-            </a>
-            
+        <div class="flex items-center gap-8"><span class="font-bold text-lg text-white">PolyLoans</span>
             <div id="navTabs" class="hidden flex gap-6 text-sm font-medium h-20 items-end pb-0">
                 <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active">Overview</button>
                 <button onclick="switchTab('borrow')" id="tab-borrow" class="tab-btn">Borrow</button>
@@ -43,11 +39,10 @@
 
     <main class="pt-28 p-8 max-w-7xl mx-auto w-full space-y-8">
 
-        <!-- 🚨 EMERGENCY KILL SWITCH 🚨 -->
         <div class="bg-red-900/10 border border-red-900/50 rounded-xl p-4 flex items-center justify-between">
             <div>
                 <h3 class="font-bold text-red-400 text-sm">⚠️ EMERGENCY ZONE</h3>
-                <p class="text-xs text-gray-400">Force cancel stuck requests (ID 1, 2, etc).</p>
+                <p class="text-xs text-gray-400">Force cancel requests (ID 1, 2, etc).</p>
             </div>
             <div class="flex gap-2">
                 <input type="number" id="killId" placeholder="Req ID" class="bg-black border border-red-900/50 text-white px-3 py-1 rounded text-sm w-20">
@@ -55,7 +50,6 @@
             </div>
         </div>
 
-        <!-- 1. OVERVIEW TAB -->
         <div id="view-overview" class="block">
             <h2 class="text-xl font-bold text-white mb-6">Dashboard</h2>
             <div class="grid grid-cols-4 gap-6">
@@ -66,25 +60,14 @@
             </div>
         </div>
 
-        <!-- 2. BORROW TAB -->
         <div id="view-borrow" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-4 bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white">New Loan Request</h2>
                 
                 <div>
-                    <div class="flex justify-between mb-1">
-                        <label class="text-xs font-bold text-gray-500">Asset</label>
-                        <label class="text-[10px] flex items-center gap-1 text-brand cursor-pointer">
-                            <input type="checkbox" onchange="toggleManualInput(this)"> Manual Input
-                        </label>
-                    </div>
-                    
-                    <select id="positionSelect" onchange="autoFillForm()" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none">
-                        <option value="">Scanning...</option>
-                    </select>
-
-                    <input type="text" id="manualTokenId" placeholder="Paste Token ID Here..." class="hidden w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none">
-                    
+                    <div class="flex justify-between mb-1"><label class="text-xs font-bold text-gray-500">Asset</label><label class="text-[10px] text-brand cursor-pointer"><input type="checkbox" onchange="toggleManualInput(this)"> Manual Input</label></div>
+                    <select id="positionSelect" onchange="autoFillForm()" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none"><option value="">Scanning...</option></select>
+                    <input type="text" id="manualTokenId" placeholder="Paste Token ID" class="hidden w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none">
                     <div id="balanceDisplay" class="text-xs text-brand mt-1 h-4"></div>
                 </div>
 
@@ -94,13 +77,9 @@
                 </div>
                 
                 <div id="ltvWarning" class="text-xs h-4 text-right font-mono text-gray-500"></div>
+                <div><label class="text-xs text-gray-500 block mb-1">Duration (Days)</label><input type="number" id="b_duration" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" placeholder="7"></div>
 
-                <div>
-                    <label class="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wider">Duration (Days)</label>
-                    <input type="number" id="b_duration" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" placeholder="7">
-                </div>
-
-                <button onclick="handleCreateRequest()" id="btnCreate" disabled class="w-full btn-primary py-3 rounded font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed">Sign & Post</button>
+                <button onclick="handleCreateRequest()" id="btnCreate" disabled class="w-full btn-primary py-3 rounded font-bold text-sm disabled:opacity-50">Sign & Post</button>
                 <div id="b_status" class="text-center text-xs mt-2 text-gray-500 font-mono"></div>
             </div>
 
@@ -110,7 +89,6 @@
             </div>
         </div>
 
-        <!-- 3. LEND TAB -->
         <div id="view-lend" class="hidden-tab space-y-6">
             <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
                 <div class="flex justify-between items-center mb-4"><h2 class="font-bold text-white">Market Feed</h2><button onclick="loadData()" class="text-xs text-brand">Refresh</button></div>
@@ -190,24 +168,29 @@
                 // FILTER ID 0 (Hard Block)
                 if (req[1].toString() === "0") continue;
 
-                // FILTER SPAM TITLE (Double check)
+                // GET TITLE
                 const info = await getInfo(req[1]);
-                const isSpam = info.title && (info.title.includes("INVALID") || info.title.includes("Unknown"));
+                let displayTitle = info.title;
+
+                // 🔥 FALLBACK IF INVALID: Show the Raw ID so you know it's real
+                if (displayTitle.includes("INVALID") || displayTitle.includes("Unknown")) {
+                    displayTitle = `<span class="text-yellow-500 font-mono">ID: ${req[1].toString().slice(0,10)}...</span>`;
+                }
 
                 // 1. MY DEBTS
                 if (isMe(req[0])) { 
                     if (req[5] && !req[6]) { // Pending
-                        bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608] flex justify-between items-center mb-2"><div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-orange-400">Pending #${i}</div></div><button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded hover:bg-red-900/20">Cancel</button></div>`;
+                        bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608] flex justify-between items-center mb-2"><div><div class="font-bold text-white text-sm">${displayTitle}</div><div class="text-xs text-orange-400">Pending #${i}</div></div><button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded hover:bg-red-900/20">Cancel</button></div>`;
                     } else if (req[6]) { // Active Loan
                         const princ = ethers.formatUnits(req[3],6);
-                        bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] flex justify-between items-center mb-2"><div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-green-400">Active Debt</div></div><button onclick="handleRepay(${i})" class="bg-brand text-white text-xs px-3 py-1 rounded">Repay</button></div>`;
+                        bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] flex justify-between items-center mb-2"><div><div class="font-bold text-white text-sm">${displayTitle}</div><div class="text-xs text-green-400">Active Debt</div></div><button onclick="handleRepay(${i})" class="bg-brand text-white text-xs px-3 py-1 rounded">Repay</button></div>`;
                     }
                 }
 
-                // 2. MARKET FEED (Hide Mine & Hide Spam)
-                if (!isMe(req[0]) && req[5] && !req[6] && !isSpam) {
+                // 2. MARKET FEED
+                if (!isMe(req[0]) && req[5] && !req[6]) {
                     feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] flex justify-between items-center mb-2">
-                        <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-gray-500">Ask: $${ethers.formatUnits(req[3],6)}</div></div>
+                        <div><div class="font-bold text-white text-sm">${displayTitle}</div><div class="text-xs text-gray-500">Ask: $${ethers.formatUnits(req[3],6)}</div></div>
                         <div class="flex gap-2"><input id="r_${i}" placeholder="%" class="w-12 bg-black text-white text-center text-xs rounded border border-gray-700"><button onclick="makeOffer(${i})" class="bg-brand px-3 py-1 rounded text-xs text-white">Offer</button></div>
                     </div>`;
                 }
@@ -234,7 +217,17 @@
     }
 
     async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy ? d.proxy.toLowerCase() : null; }catch(e){} }
-    async function getInfo(id) { if(INFO_CACHE[id]) return INFO_CACHE[id]; try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const d = await res.json(); INFO_CACHE[id]=d; return d; } catch{ return {title:"Unknown"}; } }
+    
+    // 🔥 CACHE BUSTER: Force fresh data
+    async function getInfo(id) { 
+        if(INFO_CACHE[id]) return INFO_CACHE[id]; 
+        try { 
+            const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}&t=${Date.now()}`); 
+            const d = await res.json(); 
+            INFO_CACHE[id]=d; 
+            return d; 
+        } catch{ return {title:"Unknown"}; } 
+    }
     
     async function scanPortfolio() {
         const select = document.getElementById("positionSelect");
