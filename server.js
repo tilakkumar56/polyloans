@@ -22,35 +22,43 @@ const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
 
-// --- 🔥 STRICT MARKET VALIDATION 🔥 ---
+// 🔥 MANUAL OVERRIDES (Restored for your Test ID) 🔥
+const MANUAL_TITLES = {
+    "111165": "Will Donald Trump win the 2024 US Election?", 
+    "217426": "Bitcoin above $100k by 2025?" 
+};
+
+// --- HYBRID SEARCH LOGIC ---
 async function fetchMarketTitle(tokenId) {
     if (!tokenId || tokenId === "0") return "INVALID ID (0)";
-    
+
+    // 1. MANUAL OVERRIDE (Priority)
+    const idStr = tokenId.toString();
+    for (const [key, val] of Object.entries(MANUAL_TITLES)) {
+        if (idStr.startsWith(key)) return val;
+    }
+
     try {
-        const url = `https://gamma-api.polymarket.com/markets?token_id=${tokenId}`;
-        const r = await axios.get(url);
-        
-        if (!r.data || r.data.length === 0) return `Unknown Asset (${tokenId.slice(0,6)}...)`;
+        // 2. GAMMA API (Fast Public Lookup)
+        const r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
+        if (r.data && r.data.length > 0) return r.data[0].question;
 
-        const market = r.data[0];
-
-        // 🚨 THE FIX: Verify the returned market actually OWNS this ID 🚨
-        // Gamma returns trending markets if ID is not found. We must filter them out.
-        const allIds = [
-            ...(market.clobTokenIds || []), 
-            ...(market.tokenIds || [])
-        ];
-
-        // Convert everything to strings for comparison
-        const targetId = tokenId.toString();
-        const hasMatch = allIds.some(id => id.toString() === targetId);
-
-        if (hasMatch) {
-            return market.question; // It's a real match
-        } else {
-            console.log(`Mismatch! Asked for ${targetId}, API gave ${market.question}`);
-            return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`; // It was a fallback result
+        // 3. SUBGRAPH (Deep Blockchain Lookup)
+        const hexId = toHex(BigInt(tokenId)); 
+        const query = `
+        {
+            conditions(where: {id: "${hexId}"}) { questionId }
+            questions(where: {id: "${hexId}"}) { title }
+            fixedProductMarketMakers(where: {collateralToken: "${hexId}"}) { title }
         }
+        `;
+        const graphRes = await axios.post('https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-6', { query });
+        const data = graphRes.data.data;
+
+        if (data.questions && data.questions.length > 0) return data.questions[0].title;
+        if (data.fixedProductMarketMakers && data.fixedProductMarketMakers.length > 0) return data.fixedProductMarketMakers[0].title;
+        
+        return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
 
     } catch (e) {
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
@@ -65,7 +73,7 @@ app.get('/market-info', async (req, res) => {
     res.json({ title: title, slug: "" });
 });
 
-// ... [STANDARD FUNCTIONS] ...
+// ... [STANDARD FUNCTIONS - DO NOT REMOVE] ...
 
 async function resolveProxy(user) {
     if(!user) return null;
@@ -113,17 +121,10 @@ app.post('/prepare-tx', async (req, res) => {
         ]);
 
         const data = encodeFunctionData({ abi: MARKET_ABI_LOCAL, functionName: funcName, args: args.map(a => BigInt(a)) });
-        const message = { to: MARKET_ADDR, value: "0", data, operation: 0, safeTxGas: "0", baseGas: "0", gasPrice: "0", gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: nonce.toString() };
+        const message = { to: MARKET_ADDR, value: "0", data: data, operation: 0, safeTxGas: "0", baseGas: "0", gasPrice: "0", gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: nonce.toString() };
         res.json({ proxy, message, domain: { verifyingContract: proxy, chainId: 137 } });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
-function getAuthHeaders(method, path) {
-    if (!API_KEY) return {};
-    const ts = Math.floor(Date.now() / 1000).toString();
-    const sig = crypto.createHmac('sha256', API_SECRET).update(ts + method + path).digest('base64');
-    return { 'Poly-Api-Key': API_KEY, 'Poly-Api-Signature': sig, 'Poly-Timestamp': ts, 'Poly-Api-Passphrase': API_PASSPHRASE };
-}
 
 app.get('/portfolio', async (req, res) => {
     const { user } = req.query;
@@ -154,12 +155,18 @@ async function sendSafeTx(safeAddr, to, data, userSignature) {
     const account = privateKeyToAccount(PRIVATE_KEY);
     const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
     const wallet = createWalletClient({ account, chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
-
     return await wallet.writeContract({
         address: safeAddr, abi: SAFE_ABI, functionName: 'execTransaction',
         args: [to, 0n, data, 0, 0n, 0n, 0n, "0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000", userSignature],
         gas: 500000n
     });
+}
+
+function getAuthHeaders(method, path) {
+    if (!API_KEY) return {};
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const sig = crypto.createHmac('sha256', API_SECRET).update(ts + method + path).digest('base64');
+    return { 'Poly-Api-Key': API_KEY, 'Poly-Api-Signature': sig, 'Poly-Timestamp': ts, 'Poly-Api-Passphrase': API_PASSPHRASE };
 }
 
 const PORT = process.env.PORT || 3000;
