@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const crypto = require('crypto');
-const { createPublicClient, createWalletClient, http, parseAbi } = require('viem');
+const { createPublicClient, createWalletClient, http, parseAbi, encodeFunctionData } = require('viem');
 const { privateKeyToAccount } = require('viem/accounts');
 const { polygon } = require('viem/chains');
 require('dotenv').config();
@@ -11,7 +11,7 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// ✅ YOUR NEW MARKET ADDRESS
+// CONFIG
 const MARKET_ADDR = "0xe5D387e0135dab4D722838DA348e6f51E9C871Af"; 
 const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
@@ -20,16 +20,53 @@ const API_SECRET = process.env.POLY_API_SECRET;
 const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
-const MARKET_ABI = parseAbi([
-    "function createRequest(uint256, uint256, uint256, uint256) external returns (uint256)", 
-    "function acceptOffer(uint256) external", 
-    "function repayLoan(uint256) external",
-    "function liquidateByTime(uint256) external",
-    "function cancelOffer(uint256) external",
-    "function cancelRequest(uint256) external"
-]);
-
 const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
+
+// --- MARKET IDENTIFICATION LOGIC ---
+async function fetchMarketTitle(tokenId) {
+    if (!tokenId || tokenId === "0") return "INVALID ID (0)";
+
+    try {
+        // Strategy 1: Gamma API (Standard)
+        const r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
+        if (r.data && r.data.length > 0) {
+            // Strict check: Ensure the returned market actually contains this Token ID
+            const m = r.data[0];
+            const ids = [
+                ...(m.clobTokenIds || []), 
+                ...(m.tokenIds || [])
+            ];
+            if (ids.includes(tokenId)) return m.question;
+        }
+
+        // Strategy 2: CLOB API (Orderbook) - Often has individual token metadata
+        const r2 = await axios.get(`https://clob.polymarket.com/asset/${tokenId}`);
+        if (r2.data && r2.data.market_slug) {
+            // If we get a slug, we can lookup the question via Gamma using the slug
+            const r3 = await axios.get(`https://gamma-api.polymarket.com/events?slug=${r2.data.market_slug}`);
+            if(r3.data && r3.data.length > 0) return r3.data[0].title;
+            return `Market: ${r2.data.market_slug}`; // Fallback to slug
+        }
+
+        return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
+
+    } catch (e) {
+        console.error(`ID Lookup Failed [${tokenId}]: ${e.message}`);
+        return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
+    }
+}
+
+app.get('/', (req, res) => res.send('PolyLoans Relayer Active'));
+
+app.get('/market-info', async (req, res) => {
+    const title = await fetchMarketTitle(req.query.tokenId);
+    res.json({ title: title, slug: "" });
+});
+
+// ... [Rest of server.js remains the same: resolveProxy, relay-tx, portfolio, etc.] ...
+// I am omitting the unchanged endpoints for brevity, but you should keep them in the file.
+
+// FULL FILE CONTINUATION FOR COPY-PASTE CONVENIENCE:
 
 async function resolveProxy(user) {
     if(!user) return null;
@@ -41,8 +78,6 @@ async function resolveProxy(user) {
     } catch(e) {}
     return null;
 }
-
-app.get('/', (req, res) => res.send('PolyLoans Relayer Active'));
 
 app.get('/get-nonce', async (req, res) => {
     const { user } = req.query;
@@ -58,9 +93,32 @@ app.get('/get-nonce', async (req, res) => {
 app.post('/relay-tx', async (req, res) => {
     const { proxy, to, data, signature } = req.body;
     try {
-        console.log(`🚀 Relaying for ${proxy}...`);
         const hash = await sendSafeTx(proxy, to, data, signature);
         res.json({ success: true, txHash: hash });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/prepare-tx', async (req, res) => {
+    const { userAddress, funcName, args } = req.body;
+    try {
+        const proxy = await resolveProxy(userAddress);
+        if(!proxy) return res.status(404).json({ error: "No Proxy Found" });
+        const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
+        const nonce = await client.readContract({ address: proxy, abi: SAFE_ABI, functionName: 'nonce' });
+        
+        // ABI Definition (Needs to be inside here or global)
+        const MARKET_ABI_LOCAL = parseAbi([
+            "function createRequest(uint256, uint256, uint256, uint256) external returns (uint256)", 
+            "function acceptOffer(uint256) external", 
+            "function repayLoan(uint256) external",
+            "function liquidateByTime(uint256) external",
+            "function cancelOffer(uint256) external",
+            "function cancelRequest(uint256) external"
+        ]);
+
+        const data = encodeFunctionData({ abi: MARKET_ABI_LOCAL, functionName: funcName, args: args.map(a => BigInt(a)) });
+        const message = { to: MARKET_ADDR, value: "0", data, operation: 0, safeTxGas: "0", baseGas: "0", gasPrice: "0", gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: nonce.toString() };
+        res.json({ proxy, message, domain: { verifyingContract: proxy, chainId: 137 } });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -85,7 +143,6 @@ app.get('/portfolio', async (req, res) => {
             if(Array.isArray(r.data)) allPos.push(...r.data);
         } catch(e) {}
     }
-
     const valid = allPos.filter(p => Number(p.size) > 0.000001);
     const rich = await Promise.all(valid.map(async (p) => {
         try {
@@ -95,45 +152,6 @@ app.get('/portfolio', async (req, res) => {
         } catch(e) { return { ...p, livePrice: "0.50", slug: "unknown" }; }
     }));
     res.json(rich);
-});
-
-// --- 🔥 FIXED MARKET INFO: STRICT MODE & FALLBACK PREVENTION 🔥 ---
-app.get('/market-info', async (req, res) => {
-    const { tokenId } = req.query;
-
-    if (!tokenId || tokenId === "0" || tokenId === "undefined" || tokenId.trim() === "") {
-        return res.json({ title: "INVALID TOKEN (ID 0)", slug: "" });
-    }
-
-    try {
-        // 1. Try Gamma API first
-        const r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
-        
-        // 2. Validate Response
-        if (!r.data || r.data.length === 0) {
-             // If empty, return strict unknown
-            return res.json({ title: `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`, slug: "" });
-        }
-
-        // 3. STRICT CHECK: Does the returned market actually contain our Token ID?
-        // Gamma sometimes returns "related" markets. We must check if our ID exists in the market's tokens.
-        const market = r.data[0];
-        const isMatch = (market.clobTokenIds && market.clobTokenIds.includes(tokenId)) || 
-                        (market.tokenIds && market.tokenIds.includes(tokenId));
-
-        if (!isMatch) {
-             // If the API gave us a market that doesn't match our ID, it's a fallback result (the Biden bug).
-             // We reject it.
-             return res.json({ title: `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`, slug: "" });
-        }
-        
-        // 4. If strict check passes, return the valid title
-        res.json({ title: market.question, slug: market.slug });
-        
-    } catch(e) { 
-        // 5. If Gamma fails, don't fallback to anything else.
-        res.json({ title: `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`, slug: "" }); 
-    }
 });
 
 async function sendSafeTx(safeAddr, to, data, userSignature) {
@@ -150,3 +168,4 @@ async function sendSafeTx(safeAddr, to, data, userSignature) {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on ${PORT}`));
+```
