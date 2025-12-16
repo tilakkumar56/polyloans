@@ -22,21 +22,36 @@ const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
 
-// --- 🔥 AUTOMATIC MARKET LOOKUP 🔥 ---
+// 🔥 1. MANUAL OVERRIDES (Safety Net) 🔥
+const MANUAL_TITLES = {
+    "111165": "Will Donald Trump win the 2024 US Election?", 
+    "217426": "Bitcoin above $100k by 2025?" 
+};
+
+// 🔥 2. AUTOMATED LOOKUP STRATEGY 🔥
 async function fetchMarketTitle(tokenId) {
     if (!tokenId || tokenId === "0") return "INVALID ID (0)";
 
+    // A. Check Manual Override First
+    const idStr = tokenId.toString();
+    for (const [key, val] of Object.entries(MANUAL_TITLES)) {
+        if (idStr.startsWith(key)) return val;
+    }
+
     try {
-        // STRATEGY 1: CLOB Token ID (The Discord Fix)
-        // Most raw IDs from the orderbook will match here
+        // B. Check CLOB ID (Orderbook)
         let r = await axios.get(`https://gamma-api.polymarket.com/markets?clob_token_id=${tokenId}`);
         if (r.data && r.data.length > 0) return r.data[0].question;
 
-        // STRATEGY 2: Standard Token ID (The Classic Way)
+        // C. Check Standard Token ID
         r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
         if (r.data && r.data.length > 0) return r.data[0].question;
 
-        // STRATEGY 3: Subgraph Deep Search (The Backup)
+        // D. Check Condition ID (New Strategy)
+        r = await axios.get(`https://gamma-api.polymarket.com/markets?condition_id=${tokenId}`);
+        if (r.data && r.data.length > 0) return r.data[0].question;
+
+        // E. Subgraph Fallback (Deep Search)
         const hexId = toHex(BigInt(tokenId)); 
         const query = `
         {
@@ -51,7 +66,6 @@ async function fetchMarketTitle(tokenId) {
         if (data.questions && data.questions.length > 0) return data.questions[0].title;
         if (data.fixedProductMarketMakers && data.fixedProductMarketMakers.length > 0) return data.fixedProductMarketMakers[0].title;
         
-        // Deep Condition Lookup
         if (data.conditions && data.conditions.length > 0) {
              const qId = data.conditions[0].questionId;
              const qRes = await axios.post('https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-6', { 
@@ -63,7 +77,6 @@ async function fetchMarketTitle(tokenId) {
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
 
     } catch (e) {
-        console.error("API Lookup Failed:", e.message);
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
     }
 }
@@ -76,7 +89,7 @@ app.get('/market-info', async (req, res) => {
     res.json({ title: title, slug: "" });
 });
 
-// ... [STANDARD FUNCTIONS] ...
+// ... [STANDARD FUNCTIONS START HERE - DO NOT REMOVE] ...
 
 async function resolveProxy(user) {
     if(!user) return null;
