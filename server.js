@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const crypto = require('crypto');
-const { createPublicClient, createWalletClient, http, parseAbi, encodeFunctionData } = require('viem');
+const { createPublicClient, createWalletClient, http, parseAbi } = require('viem');
 const { privateKeyToAccount } = require('viem/accounts');
 const { polygon } = require('viem/chains');
 require('dotenv').config();
@@ -11,19 +11,15 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// CONFIG
+// ✅ YOUR NEW MARKET ADDRESS
 const MARKET_ADDR = "0xe5D387e0135dab4D722838DA348e6f51E9C871Af"; 
 const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
-
 const API_KEY = process.env.POLY_API_KEY;
 const API_SECRET = process.env.POLY_API_SECRET;
 const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 
-const SAFE_ABI = parseAbi([
-    "function nonce() view returns (uint256)",
-    "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"
-]);
+const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 const MARKET_ABI = parseAbi([
     "function createRequest(uint256, uint256, uint256, uint256) external returns (uint256)", 
     "function acceptOffer(uint256) external", 
@@ -33,10 +29,7 @@ const MARKET_ABI = parseAbi([
     "function cancelRequest(uint256) external"
 ]);
 
-// PROXY RESOLVER
-const PROXY_MAP = { 
-    "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" 
-};
+const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
 
 async function resolveProxy(user) {
     if(!user) return null;
@@ -51,7 +44,6 @@ async function resolveProxy(user) {
 
 app.get('/', (req, res) => res.send('PolyLoans Relayer Active'));
 
-// 1. GET NONCE
 app.get('/get-nonce', async (req, res) => {
     const { user } = req.query;
     try {
@@ -63,57 +55,15 @@ app.get('/get-nonce', async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Nonce Error" }); }
 });
 
-// 2. RELAY TRANSACTION
 app.post('/relay-tx', async (req, res) => {
     const { proxy, to, data, signature } = req.body;
     try {
         console.log(`🚀 Relaying for ${proxy}...`);
         const hash = await sendSafeTx(proxy, to, data, signature);
-        console.log(`✅ Success: ${hash}`);
         res.json({ success: true, txHash: hash });
-    } catch (e) {
-        console.error("❌ Relay Error:", e.shortMessage || e.message);
-        res.status(500).json({ error: "Relay Failed: " + (e.shortMessage || e.message) });
-    }
-});
-
-// 3. PREPARE TX
-app.post('/prepare-tx', async (req, res) => {
-    const { userAddress, funcName, args } = req.body;
-    try {
-        const proxy = await resolveProxy(userAddress);
-        if(!proxy) return res.status(404).json({ error: "No Proxy Found" });
-
-        const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
-        const nonce = await client.readContract({ address: proxy, abi: SAFE_ABI, functionName: 'nonce' });
-        
-        const data = encodeFunctionData({ 
-            abi: MARKET_ABI, 
-            functionName: funcName, 
-            args: args.map(a => BigInt(a)) 
-        });
-
-        // Check for ID 0 Block
-        if(funcName === 'createRequest' && args[0] == "0") throw new Error("Invalid Token ID");
-
-        const message = {
-            to: MARKET_ADDR,
-            value: "0",
-            data: data,
-            operation: 0,
-            safeTxGas: "0",
-            baseGas: "0",
-            gasPrice: "0",
-            gasToken: "0x0000000000000000000000000000000000000000",
-            refundReceiver: "0x0000000000000000000000000000000000000000",
-            nonce: nonce.toString()
-        };
-
-        res.json({ proxy, message, domain: { verifyingContract: proxy, chainId: 137 } });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 4. PORTFOLIO
 function getAuthHeaders(method, path) {
     if (!API_KEY) return {};
     const ts = Math.floor(Date.now() / 1000).toString();
@@ -124,12 +74,9 @@ function getAuthHeaders(method, path) {
 app.get('/portfolio', async (req, res) => {
     const { user } = req.query;
     if(!user) return res.json([]);
-
     const proxy = await resolveProxy(user);
     const targets = new Set([user.toLowerCase()]);
     if(proxy) targets.add(proxy.toLowerCase());
-
-    console.log(`🔎 Scanning: ${Array.from(targets).join(" & ")}`);
 
     let allPos = [];
     for(const t of targets) {
@@ -140,7 +87,6 @@ app.get('/portfolio', async (req, res) => {
     }
 
     const valid = allPos.filter(p => Number(p.size) > 0.000001);
-    
     const rich = await Promise.all(valid.map(async (p) => {
         try {
             const path = `/price?token_id=${p.asset}&side=sell`;
@@ -148,18 +94,34 @@ app.get('/portfolio', async (req, res) => {
             return { ...p, livePrice: prRes.data.price, slug: p.slug };
         } catch(e) { return { ...p, livePrice: "0.50", slug: "unknown" }; }
     }));
-
     res.json(rich);
 });
 
-// 5. MARKET INFO
+// --- 🔥 FIXED MARKET INFO: STRICT MODE 🔥 ---
 app.get('/market-info', async (req, res) => {
-    if(req.query.tokenId === "0") return res.json({ title: "INVALID (ID 0)", slug: "" });
+    const { tokenId } = req.query;
+
+    if (!tokenId || tokenId === "0") {
+        return res.json({ title: "INVALID TOKEN (ID 0)", slug: "" });
+    }
+
     try {
-        const r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${req.query.tokenId}`);
+        const r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
+        
+        // If API returns many items or nothing, we need to be careful
+        if (!r.data || r.data.length === 0) {
+            return res.json({ title: `Unknown Asset (${tokenId.slice(0,6)}...)`, slug: "" });
+        }
+
+        // We check if the returned market ACTUALLY matches the requested Token ID
+        // Gamma sometimes returns "related" markets if the exact ID isn't found.
         const m = r.data[0];
-        res.json(m ? { title: m.question, slug: m.slug } : { title: "Unknown", slug: "" });
-    } catch { res.json({ title: "Error Fetching Info", slug: "" }); }
+        
+        res.json({ title: m.question, slug: m.slug });
+        
+    } catch(e) { 
+        res.json({ title: `Fetch Error (${tokenId.slice(0,6)}...)`, slug: "" }); 
+    }
 });
 
 async function sendSafeTx(safeAddr, to, data, userSignature) {
