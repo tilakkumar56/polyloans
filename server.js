@@ -97,30 +97,42 @@ app.get('/portfolio', async (req, res) => {
     res.json(rich);
 });
 
-// --- 🔥 FIXED MARKET INFO: STRICT MODE 🔥 ---
+// --- 🔥 FIXED MARKET INFO: STRICT MODE & FALLBACK PREVENTION 🔥 ---
 app.get('/market-info', async (req, res) => {
     const { tokenId } = req.query;
 
-    if (!tokenId || tokenId === "0") {
+    if (!tokenId || tokenId === "0" || tokenId === "undefined" || tokenId.trim() === "") {
         return res.json({ title: "INVALID TOKEN (ID 0)", slug: "" });
     }
 
     try {
+        // 1. Try Gamma API first
         const r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
         
-        // If API returns many items or nothing, we need to be careful
+        // 2. Validate Response
         if (!r.data || r.data.length === 0) {
-            return res.json({ title: `Unknown Asset (${tokenId.slice(0,6)}...)`, slug: "" });
+             // If empty, return strict unknown
+            return res.json({ title: `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`, slug: "" });
         }
 
-        // We check if the returned market ACTUALLY matches the requested Token ID
-        // Gamma sometimes returns "related" markets if the exact ID isn't found.
-        const m = r.data[0];
+        // 3. STRICT CHECK: Does the returned market actually contain our Token ID?
+        // Gamma sometimes returns "related" markets. We must check if our ID exists in the market's tokens.
+        const market = r.data[0];
+        const isMatch = (market.clobTokenIds && market.clobTokenIds.includes(tokenId)) || 
+                        (market.tokenIds && market.tokenIds.includes(tokenId));
+
+        if (!isMatch) {
+             // If the API gave us a market that doesn't match our ID, it's a fallback result (the Biden bug).
+             // We reject it.
+             return res.json({ title: `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`, slug: "" });
+        }
         
-        res.json({ title: m.question, slug: m.slug });
+        // 4. If strict check passes, return the valid title
+        res.json({ title: market.question, slug: market.slug });
         
     } catch(e) { 
-        res.json({ title: `Fetch Error (${tokenId.slice(0,6)}...)`, slug: "" }); 
+        // 5. If Gamma fails, don't fallback to anything else.
+        res.json({ title: `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`, slug: "" }); 
     }
 });
 
