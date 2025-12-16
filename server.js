@@ -22,32 +22,21 @@ const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
 
-// 🔥 1. MANUAL OVERRIDES (Instant Fix) 🔥
-const MANUAL_TITLES = {
-    "111165": "Will Donald Trump win the 2024 US Election?", 
-    "217426": "Bitcoin above $100k by 2025?" 
-};
-
-// 🔥 2. DEEP SEARCH LOGIC (API + Subgraph) 🔥
+// --- 🔥 AUTOMATIC MARKET LOOKUP 🔥 ---
 async function fetchMarketTitle(tokenId) {
     if (!tokenId || tokenId === "0") return "INVALID ID (0)";
 
-    // STEP A: Manual Override
-    const idStr = tokenId.toString();
-    for (const [key, val] of Object.entries(MANUAL_TITLES)) {
-        if (idStr.startsWith(key)) return val;
-    }
-
     try {
-        // STEP B: Gamma API (CLOB ID)
+        // STRATEGY 1: CLOB Token ID (The Discord Fix)
+        // Most raw IDs from the orderbook will match here
         let r = await axios.get(`https://gamma-api.polymarket.com/markets?clob_token_id=${tokenId}`);
         if (r.data && r.data.length > 0) return r.data[0].question;
 
-        // STEP C: Gamma API (Standard ID)
+        // STRATEGY 2: Standard Token ID (The Classic Way)
         r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
         if (r.data && r.data.length > 0) return r.data[0].question;
 
-        // STEP D: The Graph (Deep Search) - This finds "hidden" markets
+        // STRATEGY 3: Subgraph Deep Search (The Backup)
         const hexId = toHex(BigInt(tokenId)); 
         const query = `
         {
@@ -74,7 +63,7 @@ async function fetchMarketTitle(tokenId) {
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
 
     } catch (e) {
-        console.log("Lookup Error:", e.message);
+        console.error("API Lookup Failed:", e.message);
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
     }
 }
@@ -87,7 +76,7 @@ app.get('/market-info', async (req, res) => {
     res.json({ title: title, slug: "" });
 });
 
-// ... [STANDARD FUNCTIONS START HERE - DO NOT REMOVE] ...
+// ... [STANDARD FUNCTIONS] ...
 
 async function resolveProxy(user) {
     if(!user) return null;
