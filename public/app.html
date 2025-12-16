@@ -29,10 +29,8 @@
                 <button onclick="switchTab('lend')" id="tab-lend" class="tab-btn">Lend</button>
             </div>
         </div>
-        <div class="flex items-center gap-4">
-            <div id="userAddr" class="hidden font-mono text-xs text-gray-400 bg-[#0B0D12] border border-[#1E2129] px-3 py-1.5 rounded-full"></div>
-            <button id="btnConnect" onclick="connectWallet()" class="btn-primary px-4 py-2 rounded text-sm font-bold shadow-lg">Connect Wallet</button>
-        </div>
+        <button id="btnConnect" onclick="connectWallet()" class="btn-primary px-4 py-2 rounded text-sm font-bold shadow-lg">Connect Wallet</button>
+        <div id="userAddr" class="hidden font-mono text-xs text-gray-400"></div>
     </nav>
 
     <main class="pt-28 p-8 max-w-7xl mx-auto w-full space-y-8">
@@ -49,7 +47,7 @@
             </div>
         </div>
 
-        <!-- 1. OVERVIEW TAB -->
+        <!-- 1. OVERVIEW -->
         <div id="view-overview" class="block">
             <h2 class="text-xl font-bold text-white mb-6">Dashboard</h2>
             <div class="grid grid-cols-4 gap-6">
@@ -60,50 +58,33 @@
             </div>
         </div>
 
-        <!-- 2. BORROW TAB -->
+        <!-- 2. BORROW -->
         <div id="view-borrow" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-4 bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white">New Loan Request</h2>
-                
                 <div>
-                    <div class="flex justify-between mb-1">
-                        <label class="text-xs font-bold text-gray-500">Asset</label>
-                        <label class="text-[10px] flex items-center gap-1 text-brand cursor-pointer">
-                            <input type="checkbox" onchange="toggleManualInput(this)"> Manual Input
-                        </label>
-                    </div>
-                    
-                    <select id="positionSelect" onchange="autoFillForm()" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none">
-                        <option value="">Scanning...</option>
-                    </select>
-
-                    <input type="text" id="manualTokenId" placeholder="Paste Token ID" class="hidden w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none" oninput="document.getElementById('b_tokenId').value = this.value">
-                    
+                    <div class="flex justify-between mb-1"><label class="text-xs font-bold text-gray-500">Asset</label><label class="text-[10px] text-brand cursor-pointer"><input type="checkbox" onchange="toggleManualInput(this)"> Manual Input</label></div>
+                    <select id="positionSelect" onchange="autoFillForm()" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none"><option value="">Scanning...</option></select>
+                    <input type="text" id="manualId" placeholder="Paste Token ID" class="hidden w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white focus:border-brand outline-none" oninput="document.getElementById('b_tokenId').value=this.value">
                     <div id="balanceDisplay" class="text-xs text-brand mt-1 h-4"></div>
                 </div>
-
                 <input type="text" id="b_tokenId" class="hidden"> 
-
                 <div class="grid grid-cols-2 gap-4">
                     <div><label class="text-xs text-gray-500 block mb-1">Shares</label><input type="number" id="b_shares" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" oninput="checkLTV()"></div>
                     <div><label class="text-xs text-gray-500 block mb-1">USDC</label><input type="number" id="b_principal" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" oninput="checkLTV()"></div>
                 </div>
-                
                 <div id="ltvWarning" class="text-xs h-4 text-right font-mono text-gray-500"></div>
-
                 <div><label class="text-xs text-gray-500 block mb-1">Duration (Days)</label><input type="number" id="b_duration" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" placeholder="7"></div>
-
-                <button onclick="handleCreateRequest()" id="btnCreate" disabled class="w-full btn-primary py-3 rounded font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed">Sign & Post</button>
-                <div id="b_status" class="text-center text-xs mt-2 text-gray-500 break-all font-mono"></div>
+                <button onclick="handleCreateRequest()" id="btnCreate" disabled class="w-full btn-primary py-3 rounded font-bold text-sm disabled:opacity-50">Sign & Post</button>
+                <div id="b_status" class="text-center text-xs mt-2 text-gray-500 font-mono"></div>
             </div>
-
             <div class="lg:col-span-8 space-y-6">
-                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">Incoming Offers</h3><div id="borrowerOffers" class="grid gap-4"><p class="text-gray-500 text-sm text-center py-4">No offers received yet.</p></div></div>
-                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Active Debts</h3><div id="borrowerLoans" class="space-y-4"><p class="text-gray-500 text-sm text-center py-4">No active debts.</p></div></div>
+                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Active Debts</h3><div id="borrowerLoans" class="space-y-3 text-sm text-gray-500">No active debts.</div></div>
+                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">Incoming Offers</h3><div id="borrowerOffers" class="space-y-3 text-sm text-gray-500">No offers received.</div></div>
             </div>
         </div>
 
-        <!-- 3. LEND TAB -->
+        <!-- 3. LEND -->
         <div id="view-lend" class="hidden-tab space-y-6">
             <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
                 <div class="flex justify-between items-center mb-4"><h2 class="font-bold text-white">Market Feed</h2><button onclick="loadData()" class="text-xs text-brand">Refresh</button></div>
@@ -137,7 +118,6 @@
         document.getElementById("userAddr").classList.remove("hidden");
         document.getElementById("btnConnect").style.display = "none";
         
-        switchTab('borrow');
         await initProxy();
         scanPortfolio(); 
         loadData(); 
@@ -159,6 +139,64 @@
         document.getElementById(`tab-${t}`).classList.add('tab-active'); 
     }
 
+    // --- 🔐 THE FIX: USE SERVER DATA ONLY ---
+    async function signAndRelay(func, args) {
+        try {
+            const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
+            const meta = await nonceRes.json();
+            if(!meta.proxy) return alert("No Proxy Found");
+
+            // 1. Get EXACT Transaction Data from Server
+            const prepRes = await fetch(`${RENDER_API_URL}/prepare-tx`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ userAddress, funcName: func, args: args.map(String) }) 
+            });
+            const prep = await prepRes.json();
+            if(prep.error) throw new Error(prep.error);
+
+            // 2. Sign EXACTLY what Server sent
+            const domain = { verifyingContract: prep.proxy, chainId: 137 };
+            const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
+            
+            // 🔥 CRITICAL: Use prep.message directly. DO NOT recreate it locally.
+            const sig = await signer.signTypedData(domain, types, prep.message);
+
+            // 3. Relay
+            const res = await fetch(`${RENDER_API_URL}/relay-tx`, { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ proxy: prep.proxy, to: MARKET_ADDR, message: prep.message, signature: sig }) 
+            });
+            
+            const json = await res.json();
+            if(!json.success) throw new Error(json.error);
+            return json.txHash;
+        } catch(e) { alert("Error: " + e.message); return null; }
+    }
+
+    async function handleCreateRequest() {
+        let id;
+        if (document.getElementById("manualTokenId").classList.contains("hidden")) {
+            id = document.getElementById("positionSelect").value;
+        } else {
+            id = document.getElementById("manualTokenId").value.trim();
+        }
+
+        const s = document.getElementById("b_shares").value;
+        const p = document.getElementById("b_principal").value;
+        const d = document.getElementById("b_duration").value;
+        
+        if(!id || id == "0") return alert("Invalid Asset ID.");
+
+        document.getElementById("b_status").innerText = "⏳ Signing...";
+        const tx = await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), BigInt(d*86400)]);
+        if(tx) { 
+            document.getElementById("b_status").innerHTML = `<a href="https://polygonscan.com/tx/${tx}" target="_blank" class="text-green-400 underline">✅ Success! View TX</a>`; 
+            setTimeout(loadData, 2000); 
+        }
+    }
+
     async function loadData() {
         const nextId = await marketContract.nextRequestId();
         const nextOff = await marketContract.nextOfferId();
@@ -167,9 +205,11 @@
         for(let i=1; i<Number(nextId); i++) {
             try {
                 const req = await marketContract.requests(i);
-                if (req[1].toString() === "0") continue; // FILTER ID 0
+                
+                // FILTER ID 0
+                if (req[1].toString() === "0") continue;
 
-                // 1. MY DEBTS (Include Stuck Requests)
+                // MY DEBTS
                 if (isMe(req[0])) { 
                     const info = await getInfo(req[1]);
                     if (req[5] && !req[6]) { // Pending
@@ -180,7 +220,7 @@
                     }
                 }
 
-                // 2. MARKET FEED
+                // MARKET FEED (Hide mine)
                 if (!isMe(req[0]) && req[5] && !req[6]) {
                     const info = await getInfo(req[1]);
                     feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] flex justify-between items-center mb-2">
@@ -236,51 +276,6 @@
 
     function autoFillForm() { const sel = document.getElementById("positionSelect"); if(sel.value) { const opt = sel.selectedOptions[0]; document.getElementById("b_tokenId").value = opt.value; document.getElementById("balanceDisplay").innerText = `Bal: ${opt.getAttribute("data-bal")} | Price: $${Number(opt.getAttribute("data-price")).toFixed(2)}`; checkLTV(); } }
     function checkLTV() { const s = Number(document.getElementById("b_shares").value); const p = Number(document.getElementById("b_principal").value); const opt = document.getElementById("positionSelect").selectedOptions[0]; const price = opt ? Number(opt.getAttribute("data-price")) : 0.5; const limit = s * price * 0.5; if(p > limit) { document.getElementById("ltvWarning").innerText = `Max: $${limit.toFixed(2)}`; document.getElementById("btnCreate").disabled = true; } else { document.getElementById("ltvWarning").innerText = "LTV OK"; document.getElementById("btnCreate").disabled = false; } }
-
-    async function signAndRelay(func, args) {
-        try {
-            const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
-            const meta = await nonceRes.json();
-            if(!meta.proxy) return alert("No Proxy Found");
-            const iface = new ethers.Interface(MARKET_ABI);
-            const data = iface.encodeFunctionData(func, args);
-            const domain = { verifyingContract: meta.proxy, chainId: 137 };
-            const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
-            const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
-            
-            // DIRECT RPC CALL
-            const payload = JSON.stringify({ types: { EIP712Domain: [{name:"verifyingContract",type:"address"},{name:"chainId",type:"uint256"}], SafeTx: types.SafeTx }, primaryType: "SafeTx", domain, message });
-            const sig = await window.ethereum.request({ method: "eth_signTypedData_v4", params: [userAddress, payload] });
-
-            const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: MARKET_ADDR, data, signature: sig }) });
-            const json = await res.json();
-            if(!json.success) throw new Error(json.error);
-            return json.txHash;
-        } catch(e) { alert(e.message); return null; }
-    }
-
-    async function handleCreateRequest() {
-        let id;
-        if (document.getElementById("manualTokenId").classList.contains("hidden")) {
-            id = document.getElementById("positionSelect").value;
-        } else {
-            id = document.getElementById("manualTokenId").value.trim();
-        }
-
-        const s = document.getElementById("b_shares").value;
-        const p = document.getElementById("b_principal").value;
-        const d = document.getElementById("b_duration").value;
-        
-        if(!id || id == "0") return alert("Invalid Asset ID.");
-
-        document.getElementById("b_status").innerText = "⏳ Signing...";
-        const tx = await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), BigInt(d*86400)]);
-        if(tx) { 
-            // SHOW HASH WITH LINK
-            document.getElementById("b_status").innerHTML = `<a href="https://polygonscan.com/tx/${tx}" target="_blank" class="text-green-400 underline">✅ Success! View TX ↗</a>`; 
-            setTimeout(loadData, 2000); 
-        }
-    }
 
     async function makeOffer(id) { const r = document.getElementById("rate_"+id).value; const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer); await(await u.approve(MARKET_ADDR,ethers.MaxUint256)).wait(); await(await marketContract.makeOffer(id, Number(r))).wait(); alert("Sent!"); loadData(); }
     async function handleAcceptOffer(id) { if(confirm("Accept?")) await signAndRelay("acceptOffer", [id]); }
