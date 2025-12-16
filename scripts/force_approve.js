@@ -4,7 +4,7 @@ const { polygon } = require('viem/chains');
 require('dotenv').config();
 
 // ⚠️ YOUR NEW MARKET ADDRESS
-const MARKET_ADDR = "0x30672b8B427BD7277c8467221441e2D3Dbf833E4"; 
+const MARKET_ADDR = "0xe5D387e0135dab4D722838DA348e6f51E9C871Af"; 
 
 // CONSTANTS
 const PROXY_ADDR  = "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7"; // Your Proxy
