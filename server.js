@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const crypto = require('crypto');
-const { createPublicClient, createWalletClient, http, parseAbi, encodeFunctionData } = require('viem');
+const { createPublicClient, createWalletClient, http, parseAbi, encodeFunctionData, toHex } = require('viem');
 const { privateKeyToAccount } = require('viem/accounts');
 const { polygon } = require('viem/chains');
 require('dotenv').config();
@@ -22,33 +22,55 @@ const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
 
-// 🔥 MANUAL OVERRIDES 🔥
-const MANUAL_TITLES = {
-    "111165": "My Test Asset (Manual Override)", // Will match your ID starting with 111165
-    "217426": "Trump Win 2024" 
-};
-
+// --- 🔥 DEEP SEARCH (SUBGRAPH) 🔥 ---
 async function fetchMarketTitle(tokenId) {
     if (!tokenId || tokenId === "0") return "INVALID ID (0)";
-    
-    const idStr = tokenId.toString();
-
-    // 1. CHECK MANUAL OVERRIDE (Strict 'Starts With')
-    for (const [key, val] of Object.entries(MANUAL_TITLES)) {
-        if (idStr.startsWith(key)) return val;
-    }
 
     try {
-        // Strategy 1: Gamma API
+        // 1. FAST CHECK: Standard Gamma API
         const r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
         if (r.data && r.data.length > 0) return r.data[0].question;
 
-        // Strategy 2: CLOB API
-        const r2 = await axios.get(`https://gamma-api.polymarket.com/markets?clob_token_id=${tokenId}`);
-        if (r2.data && r2.data.length > 0) return r2.data[0].question;
+        // 2. DEEP CHECK: The Graph (Polymarket Mainnet Subgraph)
+        // We must convert the Decimal ID (e.g. 111165...) to Hex for the lookup
+        const hexId = toHex(BigInt(tokenId)); 
+        
+        const query = `
+        {
+            conditions(where: {id: "${hexId}"}) {
+                oracle
+                questionId
+            }
+            questions(where: {id: "${hexId}"}) {
+                title
+            }
+            fixedProductMarketMakers(where: {collateralToken: "${hexId}"}) {
+                title
+            }
+        }
+        `;
+
+        const graphRes = await axios.post('https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-6', { query });
+        const data = graphRes.data.data;
+
+        // Check various fields where the title might hide
+        if (data.questions && data.questions.length > 0) return data.questions[0].title;
+        if (data.fixedProductMarketMakers && data.fixedProductMarketMakers.length > 0) return data.fixedProductMarketMakers[0].title;
+        
+        // If we found a Condition but no Title, use the Oracle/Question ID fallback
+        if (data.conditions && data.conditions.length > 0) {
+             // Try one last lookup using the Question ID found in the condition
+             const qId = data.conditions[0].questionId;
+             const qRes = await axios.post('https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-6', { 
+                 query: `{ questions(where: {id: "${qId}"}) { title } }` 
+             });
+             if (qRes.data.data.questions.length > 0) return qRes.data.data.questions[0].title;
+        }
 
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
+
     } catch (e) {
+        console.log("Lookup Error:", e.message);
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
     }
 }
@@ -61,8 +83,7 @@ app.get('/market-info', async (req, res) => {
     res.json({ title: title, slug: "" });
 });
 
-// ... [REST OF STANDARD FUNCTIONS] ...
-// Copying crucial backend logic to ensure file is complete
+// ... [STANDARD FUNCTIONS START HERE - DO NOT REMOVE] ...
 
 async function resolveProxy(user) {
     if(!user) return null;
@@ -91,6 +112,32 @@ app.post('/relay-tx', async (req, res) => {
     try {
         const hash = await sendSafeTx(proxy, to, data, signature);
         res.json({ success: true, txHash: hash });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/prepare-tx', async (req, res) => {
+    // ... [Same as previous logic] ...
+    // Included for completeness if you use it, or can be removed if not used by app.html
+    const { userAddress, funcName, args } = req.body;
+    try {
+        const proxy = await resolveProxy(userAddress);
+        if(!proxy) return res.status(404).json({ error: "No Proxy Found" });
+        const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
+        const nonce = await client.readContract({ address: proxy, abi: SAFE_ABI, functionName: 'nonce' });
+        
+        // Local ABI required here if this endpoint is used
+        const MARKET_ABI_LOCAL = parseAbi([
+            "function createRequest(uint256, uint256, uint256, uint256) external returns (uint256)", 
+            "function acceptOffer(uint256) external", 
+            "function repayLoan(uint256) external",
+            "function liquidateByTime(uint256) external",
+            "function cancelOffer(uint256) external",
+            "function cancelRequest(uint256) external"
+        ]);
+
+        const data = encodeFunctionData({ abi: MARKET_ABI_LOCAL, functionName: funcName, args: args.map(a => BigInt(a)) });
+        const message = { to: MARKET_ADDR, value: "0", data: data, operation: 0, safeTxGas: "0", baseGas: "0", gasPrice: "0", gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: nonce.toString() };
+        res.json({ proxy, message, domain: { verifyingContract: proxy, chainId: 137 } });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -123,6 +170,7 @@ async function sendSafeTx(safeAddr, to, data, userSignature) {
     const account = privateKeyToAccount(PRIVATE_KEY);
     const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
     const wallet = createWalletClient({ account, chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
+
     return await wallet.writeContract({
         address: safeAddr, abi: SAFE_ABI, functionName: 'execTransaction',
         args: [to, 0n, data, 0, 0n, 0n, 0n, "0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000", userSignature],
