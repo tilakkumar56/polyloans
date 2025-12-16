@@ -22,47 +22,56 @@ const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
 
-// 🔥 MANUAL OVERRIDES (Restored for your Test ID) 🔥
+// 🔥 MANUAL OVERRIDES (Keep as backup) 🔥
 const MANUAL_TITLES = {
     "111165": "Will Donald Trump win the 2024 US Election?", 
     "217426": "Bitcoin above $100k by 2025?" 
 };
 
-// --- HYBRID SEARCH LOGIC ---
+// --- HELPER: Query Gamma with Strict Validation ---
+async function queryGamma(param, id) {
+    try {
+        const url = `https://gamma-api.polymarket.com/markets?${param}=${id}`;
+        const r = await axios.get(url);
+        
+        if (!r.data || r.data.length === 0) return null;
+
+        const m = r.data[0];
+        
+        // 🚨 STRICT CHECK: Ensure the market actually links to this ID
+        // The API returns "Trending Markets" (Biden) if not found, so we MUST check the ID list.
+        const allIds = [
+            ...(m.clobTokenIds || []), 
+            ...(m.tokenIds || [])
+        ];
+
+        // Convert all to strings for safe comparison
+        if (allIds.map(x => x.toString()).includes(id.toString())) {
+            return m.question;
+        }
+        return null; // ID mismatch = Junk result (Biden)
+
+    } catch(e) { return null; }
+}
+
 async function fetchMarketTitle(tokenId) {
     if (!tokenId || tokenId === "0") return "INVALID ID (0)";
-
-    // 1. MANUAL OVERRIDE (Priority)
+    
+    // 1. Check Manual Override first (Fastest)
     const idStr = tokenId.toString();
     for (const [key, val] of Object.entries(MANUAL_TITLES)) {
         if (idStr.startsWith(key)) return val;
     }
 
-    try {
-        // 2. GAMMA API (Fast Public Lookup)
-        const r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
-        if (r.data && r.data.length > 0) return r.data[0].question;
+    // 2. Try CLOB TOKEN ID (This is the fix!)
+    let title = await queryGamma("clob_token_id", tokenId);
+    if (title) return title;
 
-        // 3. SUBGRAPH (Deep Blockchain Lookup)
-        const hexId = toHex(BigInt(tokenId)); 
-        const query = `
-        {
-            conditions(where: {id: "${hexId}"}) { questionId }
-            questions(where: {id: "${hexId}"}) { title }
-            fixedProductMarketMakers(where: {collateralToken: "${hexId}"}) { title }
-        }
-        `;
-        const graphRes = await axios.post('https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-6', { query });
-        const data = graphRes.data.data;
+    // 3. Try Standard TOKEN ID (Fallback)
+    title = await queryGamma("token_id", tokenId);
+    if (title) return title;
 
-        if (data.questions && data.questions.length > 0) return data.questions[0].title;
-        if (data.fixedProductMarketMakers && data.fixedProductMarketMakers.length > 0) return data.fixedProductMarketMakers[0].title;
-        
-        return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
-
-    } catch (e) {
-        return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
-    }
+    return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
 }
 
 // --- ENDPOINTS ---
@@ -73,7 +82,7 @@ app.get('/market-info', async (req, res) => {
     res.json({ title: title, slug: "" });
 });
 
-// ... [STANDARD FUNCTIONS - DO NOT REMOVE] ...
+// ... [STANDARD FUNCTIONS START HERE - DO NOT REMOVE] ...
 
 async function resolveProxy(user) {
     if(!user) return null;
@@ -155,6 +164,7 @@ async function sendSafeTx(safeAddr, to, data, userSignature) {
     const account = privateKeyToAccount(PRIVATE_KEY);
     const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
     const wallet = createWalletClient({ account, chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
+
     return await wallet.writeContract({
         address: safeAddr, abi: SAFE_ABI, functionName: 'execTransaction',
         args: [to, 0n, data, 0, 0n, 0n, 0n, "0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000", userSignature],
