@@ -22,56 +22,32 @@ const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
 
-// 🔥 MANUAL OVERRIDES (Keep as backup) 🔥
-const MANUAL_TITLES = {
-    "111165": "Will Donald Trump win the 2024 US Election?", 
-    "217426": "Bitcoin above $100k by 2025?" 
-};
-
-// --- HELPER: Query Gamma with Strict Validation ---
-async function queryGamma(param, id) {
-    try {
-        const url = `https://gamma-api.polymarket.com/markets?${param}=${id}`;
-        const r = await axios.get(url);
-        
-        if (!r.data || r.data.length === 0) return null;
-
-        const m = r.data[0];
-        
-        // 🚨 STRICT CHECK: Ensure the market actually links to this ID
-        // The API returns "Trending Markets" (Biden) if not found, so we MUST check the ID list.
-        const allIds = [
-            ...(m.clobTokenIds || []), 
-            ...(m.tokenIds || [])
-        ];
-
-        // Convert all to strings for safe comparison
-        if (allIds.map(x => x.toString()).includes(id.toString())) {
-            return m.question;
-        }
-        return null; // ID mismatch = Junk result (Biden)
-
-    } catch(e) { return null; }
-}
-
+// --- 🔥 CORRECT MARKET LOOKUP LOGIC 🔥 ---
 async function fetchMarketTitle(tokenId) {
     if (!tokenId || tokenId === "0") return "INVALID ID (0)";
-    
-    // 1. Check Manual Override first (Fastest)
-    const idStr = tokenId.toString();
-    for (const [key, val] of Object.entries(MANUAL_TITLES)) {
-        if (idStr.startsWith(key)) return val;
+
+    try {
+        // Strategy 1: CLOB Token ID (Prioritized per Discord advice)
+        let r = await axios.get(`https://gamma-api.polymarket.com/markets?clob_token_id=${tokenId}`);
+        if (r.data && r.data.length > 0) return r.data[0].question;
+
+        // Strategy 2: Standard Token ID
+        r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
+        if (r.data && r.data.length > 0) return r.data[0].question;
+
+        // Strategy 3: Direct CLOB Asset Lookup (Fallback)
+        const r2 = await axios.get(`https://clob.polymarket.com/asset/${tokenId}`);
+        if (r2.data && r2.data.market_slug) {
+            const r3 = await axios.get(`https://gamma-api.polymarket.com/events?slug=${r2.data.market_slug}`);
+            if(r3.data && r3.data.length > 0) return r3.data[0].title;
+            return `Market: ${r2.data.market_slug}`;
+        }
+
+        return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
+
+    } catch (e) {
+        return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
     }
-
-    // 2. Try CLOB TOKEN ID (This is the fix!)
-    let title = await queryGamma("clob_token_id", tokenId);
-    if (title) return title;
-
-    // 3. Try Standard TOKEN ID (Fallback)
-    title = await queryGamma("token_id", tokenId);
-    if (title) return title;
-
-    return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
 }
 
 // --- ENDPOINTS ---
@@ -82,7 +58,7 @@ app.get('/market-info', async (req, res) => {
     res.json({ title: title, slug: "" });
 });
 
-// ... [STANDARD FUNCTIONS START HERE - DO NOT REMOVE] ...
+// ... [STANDARD FUNCTIONS BELOW] ...
 
 async function resolveProxy(user) {
     if(!user) return null;
@@ -126,6 +102,8 @@ app.post('/prepare-tx', async (req, res) => {
             "function createRequest(uint256, uint256, uint256, uint256) external returns (uint256)", 
             "function acceptOffer(uint256) external", 
             "function repayLoan(uint256) external",
+            "function liquidateByTime(uint256) external",
+            "function cancelOffer(uint256) external",
             "function cancelRequest(uint256) external"
         ]);
 
