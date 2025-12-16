@@ -24,7 +24,6 @@
     <nav class="h-20 border-b border-[#1E2129] flex items-center justify-between px-8 bg-[#020408]/90 backdrop-blur fixed w-full z-50">
         <div class="flex items-center gap-8"><span class="font-bold text-lg text-white">PolyLoans</span>
             
-            <!-- FIXED: REMOVED 'hidden' CLASS -->
             <div id="navTabs" class="flex gap-6 text-sm font-medium h-20 items-end pb-0">
                 <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active">Overview</button>
                 <button onclick="switchTab('borrow')" id="tab-borrow" class="tab-btn">Borrow</button>
@@ -39,30 +38,27 @@
 
     <main class="pt-28 p-8 max-w-7xl mx-auto w-full space-y-8">
 
-        <!-- 🚨 EMERGENCY KILL SWITCH 🚨 -->
         <div class="bg-red-900/10 border border-red-900/50 rounded-xl p-4 flex items-center justify-between">
             <div>
                 <h3 class="font-bold text-red-400 text-sm">⚠️ EMERGENCY ZONE</h3>
-                <p class="text-xs text-gray-400">Force cancel requests (ID 1, 2, etc).</p>
+                <p class="text-xs text-gray-400">Force cancel requests (ID 1, 2, 18, etc).</p>
             </div>
             <div class="flex gap-2">
-                <input type="number" id="killId" placeholder="ID" class="bg-black border border-red-900/50 text-white px-3 py-1 rounded text-sm w-20">
+                <input type="number" id="killId" placeholder="Req ID" class="bg-black border border-red-900/50 text-white px-3 py-1 rounded text-sm w-20">
                 <button onclick="forceKill()" class="btn-danger px-4 py-2 rounded text-sm font-bold">KILL</button>
             </div>
         </div>
 
-        <!-- 1. OVERVIEW -->
         <div id="view-overview" class="space-y-6">
             <h2 class="text-xl font-bold text-white">Dashboard</h2>
             <div class="grid grid-cols-4 gap-6">
-                <div class="bg-[#0B0D12] border border-[#1E2129] p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase">My Debt</div><div class="text-2xl font-bold text-red-400" id="statBorrowed">$0.00</div></div>
-                <div class="bg-[#0B0D12] border border-[#1E2129] p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase">My Investments</div><div class="text-2xl font-bold text-emerald-400" id="statLent">$0.00</div></div>
-                <div class="bg-[#0B0D12] border border-[#1E2129] p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase">Active Deals</div><div class="text-2xl font-bold text-white" id="statCount">0</div></div>
-                <div class="bg-[#0B0D12] border border-[#1E2129] p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase">Positions</div><div class="text-2xl font-bold text-brand" id="statShares">0</div></div>
+                <div class="bg-[#0B0D12] border border-[#1E2129] p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase font-bold">My Debt</div><div class="text-2xl font-bold text-red-400" id="statBorrowed">$0.00</div></div>
+                <div class="bg-[#0B0D12] border border-[#1E2129] p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase font-bold">My Investments</div><div class="text-2xl font-bold text-emerald-400" id="statLent">$0.00</div></div>
+                <div class="bg-[#0B0D12] border border-[#1E2129] p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase font-bold">Active Deals</div><div class="text-2xl font-bold text-white" id="statCount">0</div></div>
+                <div class="bg-[#0B0D12] border border-[#1E2129] p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase font-bold">Positions</div><div class="text-2xl font-bold text-brand" id="statShares">0</div></div>
             </div>
         </div>
 
-        <!-- 2. BORROW -->
         <div id="view-borrow" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-4 bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white">New Loan Request</h2>
@@ -78,7 +74,7 @@
                     <div><label class="text-xs text-gray-500 block mb-1">USDC</label><input type="number" id="b_principal" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" oninput="checkLTV()"></div>
                 </div>
                 <div id="ltvWarning" class="text-xs h-4 text-right"></div>
-                <div><label class="text-xs text-gray-500 block mb-1">Duration (Mins)</label><input type="number" id="b_duration" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" placeholder="60"></div>
+                <div><label class="text-xs text-gray-500 block mb-1">Duration (Days)</label><input type="number" id="b_duration" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" placeholder="7"></div>
                 <button onclick="handleCreateRequest()" id="btnCreate" disabled class="w-full btn-primary py-3 rounded font-bold text-sm disabled:opacity-50">Sign & Post</button>
                 <div id="b_status" class="text-center text-xs mt-2 text-gray-500"></div>
             </div>
@@ -88,7 +84,6 @@
             </div>
         </div>
 
-        <!-- 3. LEND -->
         <div id="view-lend" class="hidden-tab space-y-6">
             <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
                 <div class="flex justify-between items-center mb-4"><h2 class="font-bold text-white">Market Feed</h2><button onclick="loadData()" class="text-xs text-brand">Refresh</button></div>
@@ -132,15 +127,22 @@
         return (target === userAddress.toLowerCase()) || (myProxy && target === myProxy); 
     }
     
+    // 🔥 ROBUST SPAM FILTER
+    function isSpam(title, id) {
+        if (id.toString() === "18") return true; // HARD BLOCK REQ #18
+        if (!title) return false;
+        const t = title.toLowerCase();
+        // Blocks: Biden, Corona, Election, Trump, Invalid
+        return t.includes("biden") || t.includes("coronavirus") || t.includes("election") || t.includes("trump") || t.includes("invalid");
+    }
+
     function switchTab(t) { 
         ['overview','borrow','lend'].forEach(v => { 
             document.getElementById(`view-${v}`).classList.add('hidden-tab'); 
             document.getElementById(`tab-${v}`).classList.remove('tab-active'); 
-            document.getElementById(`tab-${v}`).classList.add('tab-inactive'); 
         }); 
         document.getElementById(`view-${t}`).classList.remove('hidden-tab'); 
         document.getElementById(`tab-${t}`).classList.add('tab-active');
-        document.getElementById(`tab-${t}`).classList.remove('tab-inactive');
     }
 
     async function loadData() {
@@ -169,6 +171,13 @@
                 // 2. MARKET FEED
                 if (!isMe(req[0]) && req[5] && !req[6]) {
                     const info = await getInfo(req[1]);
+                    
+                    // 🔥 CHECK FILTER
+                    if (isSpam(info.title, i)) {
+                        console.log(`Blocked Spam ID: ${i} | Title: ${info.title}`);
+                        continue;
+                    }
+
                     feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] flex justify-between items-center mb-2">
                         <div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs text-gray-500">Ask: $${ethers.formatUnits(req[3],6)}</div></div>
                         <div class="flex gap-2"><input id="r_${i}" placeholder="%" class="w-12 bg-black text-white text-center text-xs rounded border border-gray-700"><button onclick="makeOffer(${i})" class="bg-brand px-3 py-1 rounded text-xs text-white">Offer</button></div>
@@ -194,9 +203,9 @@
             } catch(e){}
         }
 
-        document.getElementById("marketFeed").innerHTML = feed || "No requests found.";
-        document.getElementById("borrowerLoans").innerHTML = bLoans || "No active debts.";
-        document.getElementById("borrowerOffers").innerHTML = bOffers || "No offers received.";
+        document.getElementById("marketFeed").innerHTML = feed || '<div class="text-center text-xs text-gray-500 py-4">No requests found.</div>';
+        document.getElementById("borrowerLoans").innerHTML = bLoans || '<div class="text-center text-xs text-gray-500 py-4">No active debts.</div>';
+        document.getElementById("borrowerOffers").innerHTML = bOffers || '<div class="text-center text-xs text-gray-500 py-4">No offers received.</div>';
     }
 
     async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy ? d.proxy.toLowerCase() : null; }catch(e){} }
@@ -218,9 +227,9 @@
         } catch(e) { select.innerHTML = '<option>Error Scanning</option>'; }
     }
     
-    function toggleManualInput(cb) {
+    function toggleManual(cb) {
         document.getElementById("positionSelect").style.display = cb.checked ? "none" : "block";
-        document.getElementById("manualTokenId").style.display = cb.checked ? "block" : "none";
+        document.getElementById("manualId").style.display = cb.checked ? "block" : "none";
         document.getElementById("b_tokenId").value = ""; 
     }
 
@@ -247,10 +256,10 @@
 
     async function handleCreateRequest() {
         let id;
-        if (document.getElementById("manualTokenId").classList.contains("hidden")) {
+        if (document.getElementById("manualId").classList.contains("hidden")) {
             id = document.getElementById("positionSelect").value;
         } else {
-            id = document.getElementById("manualTokenId").value.trim();
+            id = document.getElementById("manualId").value.trim();
         }
         const s = document.getElementById("b_shares").value;
         const p = document.getElementById("b_principal").value;
