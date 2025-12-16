@@ -22,20 +22,20 @@ const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
 
-// 🔥 MANUAL OVERRIDES (BYPASS GOLDSKY OUTAGE) 🔥
+// 🔥 MANUAL OVERRIDES 🔥
 const MANUAL_TITLES = {
-    // Paste the full ID you see in the feed here
-    "111165": "My Test Asset (Manual Override)", 
-    "0": "Invalid Asset" 
+    "111165": "My Test Asset (Manual Override)", // Will match your ID starting with 111165
+    "217426": "Trump Win 2024" 
 };
 
 async function fetchMarketTitle(tokenId) {
     if (!tokenId || tokenId === "0") return "INVALID ID (0)";
+    
+    const idStr = tokenId.toString();
 
-    // 1. CHECK MANUAL OVERRIDE FIRST
-    // We check if the ID *starts with* the key, just in case of formatting
+    // 1. CHECK MANUAL OVERRIDE (Strict 'Starts With')
     for (const [key, val] of Object.entries(MANUAL_TITLES)) {
-        if (tokenId.toString().includes(key)) return val;
+        if (idStr.startsWith(key)) return val;
     }
 
     try {
@@ -61,7 +61,8 @@ app.get('/market-info', async (req, res) => {
     res.json({ title: title, slug: "" });
 });
 
-// ... [STANDARD FUNCTIONS BELOW - NO CHANGES NEEDED] ...
+// ... [REST OF STANDARD FUNCTIONS] ...
+// Copying crucial backend logic to ensure file is complete
 
 async function resolveProxy(user) {
     if(!user) return null;
