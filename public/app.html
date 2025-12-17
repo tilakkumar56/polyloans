@@ -33,6 +33,7 @@
             </div>
         </div>
         <div class="flex items-center gap-4">
+            <div id="proxyStatus" class="text-[10px] text-gray-500 font-mono hidden">Proxy: <span id="proxyAddr">...</span></div>
             <div id="userAddr" class="hidden font-mono text-xs text-gray-400 bg-[#0B0D12] border border-[#1E2129] px-3 py-1.5 rounded-full"></div>
             <button id="btnConnect" onclick="connectWallet()" class="btn-primary px-4 py-2 rounded text-sm font-bold shadow-lg">Connect Wallet</button>
         </div>
@@ -118,8 +119,6 @@
             document.getElementById("navTabs").classList.remove("hidden");
             
             switchTab('borrow'); 
-            
-            // 🔥 IDENTITY FIX: Force Proxy Load
             console.log("🔍 Fetching Identity...");
             await initProxy();
             scanPortfolio(); 
@@ -168,20 +167,21 @@
         let feed="", bOffers="", bLoans="", lLoans="";
         let requestOffersMap = {}; 
 
-        // 1. Gather Offers
+        // 1. GATHER ALL OFFERS
         for(let i=1; i<Number(nextOff); i++) {
             try {
                 const off = await marketContract.offers(i); 
+                // off[3] is isActive
                 if(off[3]) {
-                    const reqKey = off[0].toString();
+                    const reqKey = off[0].toString(); // String Key
                     if(!requestOffersMap[reqKey]) requestOffersMap[reqKey] = [];
                     requestOffersMap[reqKey].push({id: i, lender: off[1], rate: Number(off[2])});
-                    console.log(`✅ Found Offer #${i} for Request #${reqKey}`);
+                    console.log(`✅ DEBUG: Found Active Offer #${i} for Request #${reqKey} from ${off[1]}`);
                 }
             } catch(e){}
         }
 
-        // 2. Loop Requests
+        // 2. LOOP REQUESTS
         for(let i=1; i<Number(nextId); i++) {
             try {
                 const req = await marketContract.requests(i); 
@@ -191,7 +191,7 @@
                 const reqKey = i.toString();
 
                 const IAmBorrower = isMe(req[0]);
-                if(IAmBorrower) console.log(`👤 I am Borrower for Request #${i}`);
+                if(IAmBorrower) console.log(`👤 DEBUG: I own Request #${i} (Proxy: ${req[0]})`);
 
                 // BORROWER VIEW
                 if (IAmBorrower) { 
@@ -204,17 +204,18 @@
                             </div>
                         </div>`;
                         
-                        // Check for Offers
+                        // OFFERS LOGIC
                         const myOffers = requestOffersMap[reqKey] || [];
-                        if(myOffers.length > 0) console.log(`👉 Injecting ${myOffers.length} offers into UI`);
-
-                        myOffers.forEach(o => {
-                            bOffers += `<div class="p-3 border border-green-900 rounded bg-[#051005] flex justify-between items-center mb-1">
-                                <div><div class="text-xs text-gray-400">Lender: <a href="https://polygonscan.com/address/${o.lender}" target="_blank" class="text-blue-400 underline">${o.lender.slice(0,6)}...</a></div>
-                                <div class="text-sm font-bold text-green-400">${o.rate}% APR</div></div>
-                                <button onclick="handleAcceptOffer(${o.id})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button>
-                            </div>`;
-                        });
+                        if(myOffers.length > 0) {
+                            console.log(`👉 DEBUG: Injecting ${myOffers.length} offers for Req #${reqKey}`);
+                            myOffers.forEach(o => {
+                                bOffers += `<div class="p-3 border border-green-900 rounded bg-[#051005] flex justify-between items-center mb-1">
+                                    <div><div class="text-xs text-gray-400">Lender: <a href="https://polygonscan.com/address/${o.lender}" target="_blank" class="text-blue-400 underline">${o.lender.slice(0,6)}...</a></div>
+                                    <div class="text-sm font-bold text-green-400">${o.rate}% APR</div></div>
+                                    <button onclick="handleAcceptOffer(${o.id})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button>
+                                </div>`;
+                            });
+                        }
                     } else if (req[6]) { // ACTIVE
                         const loan = await marketContract.loans(i);
                         const due = Number(loan[2]);
@@ -286,6 +287,7 @@
         document.getElementById("lenderLoans").innerHTML = lLoans || '<div class="text-center text-xs text-gray-500">No investments.</div>';
     }
 
+    // ACTIONS
     async function handleSeize(id) { if(!confirm("Liquidate this loan and seize shares?")) return; await signAndRelay("liquidateByTime", [id]); alert("Shares Seized! Check your Portfolio."); loadData(); }
     async function handleRepay(id) { if(!confirm("Repay this loan?")) return; await signAndRelay("repayLoan", [id]); loadData(); }
     async function handleAcceptOffer(id) { if(!confirm("Accept this offer?")) return; await signAndRelay("acceptOffer", [id]); loadData(); }
@@ -309,6 +311,8 @@
             const d = await r.json(); 
             if(d.proxy) {
                 window.myProxy = d.proxy.toLowerCase();
+                document.getElementById("proxyStatus").classList.remove("hidden");
+                document.getElementById("proxyAddr").innerText = window.myProxy.slice(0,6)+"...";
                 console.log("✅ Identity Verified: Proxy is " + window.myProxy);
             } else {
                 console.warn("⚠️ Proxy not found, trying again...");
