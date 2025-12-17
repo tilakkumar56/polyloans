@@ -48,11 +48,6 @@
                 <div class="bg-[#0B0D12] border border-[#1E2129] p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase">My Debt</div><div class="text-2xl font-bold text-red-400" id="statBorrowed">$0.00</div></div>
                 <div class="bg-[#0B0D12] border border-[#1E2129] p-6 rounded-xl"><div class="text-xs text-gray-500 uppercase">My Investments</div><div class="text-2xl font-bold text-emerald-400" id="statLent">$0.00</div></div>
             </div>
-            
-            <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
-                <h3 class="font-bold text-white mb-4">Transaction History</h3>
-                <div id="historyLog" class="text-xs font-mono text-gray-500 space-y-2">Loading history...</div>
-            </div>
         </div>
 
         <div id="view-borrow" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -81,7 +76,7 @@
             </div>
 
             <div class="lg:col-span-8 space-y-6">
-                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Active Debts (Liquidations)</h3><div id="borrowerLoans" class="space-y-4 text-sm text-gray-500">No active debts.</div></div>
+                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Requests (Cancel Here)</h3><div id="borrowerLoans" class="space-y-4 text-sm text-gray-500">No active debts.</div></div>
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">Incoming Offers</h3><div id="borrowerOffers" class="grid gap-4 text-sm text-gray-500">No offers.</div></div>
             </div>
         </div>
@@ -135,6 +130,8 @@
             document.getElementById("navTabs").classList.remove("hidden");
             
             switchTab('borrow'); 
+            
+            // 🔥 CRITICAL: Wait for Proxy to load before loading feed
             await initProxy();
             scanPortfolio(); 
             loadData(); 
@@ -210,9 +207,12 @@
                 const info = await getInfo(req[1]);
                 const link = `https://polymarket.com/event/${info.slug || 'unknown'}?tid=${req[1]}`;
                 
-                // BORROWER
-                if (isMe(req[0])) { 
-                    if (req[5] && !req[6]) { // Pending
+                // --- 🔥 IDENTITY CHECK 🔥 ---
+                const IAmBorrower = isMe(req[0]);
+
+                // --- VIEW 1: I AM THE BORROWER ---
+                if (IAmBorrower) { 
+                    if (req[5] && !req[6]) { // PENDING REQUEST
                         bLoans += `
                         <div class="p-4 border border-gray-700 rounded bg-[#050608] mb-2">
                             <div class="flex justify-between items-start mb-2">
@@ -228,7 +228,7 @@
                                 <button onclick="handleAcceptOffer(${o.id})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button>
                             </div>`;
                         });
-                    } else if (req[6]) { // Active
+                    } else if (req[6]) { // ACTIVE LOAN
                         const loan = await marketContract.loans(i);
                         const due = Number(loan[2]);
                         const now = Math.floor(Date.now()/1000);
@@ -249,8 +249,8 @@
                     }
                 }
 
-                // LENDER FEED
-                if (!isMe(req[0]) && req[5] && !req[6]) {
+                // --- VIEW 2: LENDER FEED (Someone else's request) ---
+                if (!IAmBorrower && req[5] && !req[6]) {
                     const competitors = requestOffersMap[i] || [];
                     const bestRate = competitors.length > 0 ? Math.min(...competitors.map(c=>c.rate)) + "%" : "None";
                     feed += `
@@ -270,10 +270,10 @@
                     </div>`;
                 }
                 
-                // LENDER ACTIVE INVESTMENTS
-                if (!isMe(req[0]) && req[6]) {
+                // --- VIEW 3: LENDER ACTIVE INVESTMENTS ---
+                if (!IAmBorrower && req[6]) {
                     const loan = await marketContract.loans(i);
-                    if (isMe(loan[0])) { 
+                    if (isMe(loan[0])) { // I am the lender
                         const due = Number(loan[2]);
                         const now = Math.floor(Date.now()/1000);
                         const canSeize = now > due;
@@ -323,7 +323,20 @@
         setTimeout(loadData, 2000);
     }
 
-    async function initProxy() { try{ const r=await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d=await r.json(); window.myProxy=d.proxy ? d.proxy.toLowerCase() : null; }catch(e){} }
+    async function initProxy() { 
+        try { 
+            const r = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); 
+            const d = await r.json(); 
+            if(d.proxy) {
+                window.myProxy = d.proxy.toLowerCase();
+                console.log("✅ Identity Verified: Proxy is " + window.myProxy);
+            } else {
+                console.warn("⚠️ Proxy not found, trying again...");
+                setTimeout(initProxy, 2000);
+            }
+        } catch(e) { console.error("Proxy fetch failed", e); setTimeout(initProxy, 2000); } 
+    }
+    
     async function getInfo(id) { if(INFO_CACHE[id]) return INFO_CACHE[id]; try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const d = await res.json(); INFO_CACHE[id]=d; return d; } catch{ return {title:"Unknown", slug:""}; } }
     
     async function signAndRelay(func, args) {
@@ -348,7 +361,7 @@
     function isMe(addr) { 
         if (!addr) return false;
         const target = addr.toLowerCase();
-        return (target === userAddress.toLowerCase()) || (myProxy && target === myProxy); 
+        return (target === userAddress.toLowerCase()) || (window.myProxy && target === window.myProxy); 
     }
     </script>
 </body>
