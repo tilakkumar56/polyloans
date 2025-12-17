@@ -130,8 +130,6 @@
             document.getElementById("navTabs").classList.remove("hidden");
             
             switchTab('borrow'); 
-            
-            // 🔥 CRITICAL: Wait for Proxy to load before loading feed
             await initProxy();
             scanPortfolio(); 
             loadData(); 
@@ -188,13 +186,16 @@
         let feed="", bOffers="", bLoans="", lLoans="";
         let requestOffersMap = {}; 
 
-        // Gather all offers
+        // 🔥 FIX: Gather all offers with STRING keys to prevent BigInt mismatch
         for(let i=1; i<Number(nextOff); i++) {
             try {
                 const off = await marketContract.offers(i); 
+                // off[0] = requestId, off[1] = lender, off[2] = rate, off[3] = isActive
                 if(off[3]) {
-                    if(!requestOffersMap[off[0]]) requestOffersMap[off[0]] = [];
-                    requestOffersMap[off[0]].push({id: i, lender: off[1], rate: Number(off[2])});
+                    const reqKey = off[0].toString(); // FORCE STRING
+                    if(!requestOffersMap[reqKey]) requestOffersMap[reqKey] = [];
+                    requestOffersMap[reqKey].push({id: i, lender: off[1], rate: Number(off[2])});
+                    console.log(`✅ Found Offer #${i} for Request #${reqKey}`);
                 }
             } catch(e){}
         }
@@ -206,13 +207,14 @@
                 if (req[1].toString() === "0") continue;
                 const info = await getInfo(req[1]);
                 const link = `https://polymarket.com/event/${info.slug || 'unknown'}?tid=${req[1]}`;
-                
-                // --- 🔥 IDENTITY CHECK 🔥 ---
+                const reqKey = i.toString(); // FORCE STRING
+
+                // IDENTITY CHECK
                 const IAmBorrower = isMe(req[0]);
 
-                // --- VIEW 1: I AM THE BORROWER ---
+                // 1. BORROWER VIEW
                 if (IAmBorrower) { 
-                    if (req[5] && !req[6]) { // PENDING REQUEST
+                    if (req[5] && !req[6]) { // PENDING
                         bLoans += `
                         <div class="p-4 border border-gray-700 rounded bg-[#050608] mb-2">
                             <div class="flex justify-between items-start mb-2">
@@ -220,7 +222,11 @@
                                 <button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded">Cancel</button>
                             </div>
                         </div>`;
-                        const myOffers = requestOffersMap[i] || [];
+                        
+                        // 🔥 FIX: Retrieve offers using String Key
+                        const myOffers = requestOffersMap[reqKey] || [];
+                        if(myOffers.length > 0) console.log(`👉 Showing ${myOffers.length} offers for My Request #${reqKey}`);
+                        
                         myOffers.forEach(o => {
                             bOffers += `<div class="p-3 border border-green-900 rounded bg-[#051005] flex justify-between items-center mb-1">
                                 <div><div class="text-xs text-gray-400">Lender: <a href="https://polygonscan.com/address/${o.lender}" target="_blank" class="text-blue-400 underline">${o.lender.slice(0,6)}...</a></div>
@@ -249,9 +255,9 @@
                     }
                 }
 
-                // --- VIEW 2: LENDER FEED (Someone else's request) ---
+                // 2. LENDER FEED
                 if (!IAmBorrower && req[5] && !req[6]) {
-                    const competitors = requestOffersMap[i] || [];
+                    const competitors = requestOffersMap[reqKey] || [];
                     const bestRate = competitors.length > 0 ? Math.min(...competitors.map(c=>c.rate)) + "%" : "None";
                     feed += `
                     <div class="p-4 border border-[#1E2129] rounded bg-[#050608] mb-2">
@@ -270,10 +276,10 @@
                     </div>`;
                 }
                 
-                // --- VIEW 3: LENDER ACTIVE INVESTMENTS ---
+                // 3. LENDER INVESTMENTS
                 if (!IAmBorrower && req[6]) {
                     const loan = await marketContract.loans(i);
-                    if (isMe(loan[0])) { // I am the lender
+                    if (isMe(loan[0])) { 
                         const due = Number(loan[2]);
                         const now = Math.floor(Date.now()/1000);
                         const canSeize = now > due;
