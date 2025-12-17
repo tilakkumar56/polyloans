@@ -15,8 +15,6 @@
         .hidden-tab{display:none!important}
         .btn-primary{background:#6366F1;color:white;transition:0.2s}
         .btn-primary:hover{background:#4F46E5}
-        .btn-danger{background:#EF4444;color:white}
-        .btn-danger:hover{background:#DC2626}
         .tab-btn { height: 100%; border-bottom: 2px solid transparent; color: #6B7280; padding: 0 10px; transition: all 0.2s; }
         .tab-active { border-bottom: 2px solid #6366F1; color: white; font-weight: bold; }
         .blink { animation: blinker 1.5s linear infinite; color: #ef4444; font-weight: bold; }
@@ -41,7 +39,6 @@
     </nav>
 
     <main class="pt-28 p-8 max-w-7xl mx-auto w-full space-y-8">
-
         <div id="view-overview" class="block space-y-6">
             <h2 class="text-xl font-bold text-white">Dashboard</h2>
             <div class="grid grid-cols-4 gap-6">
@@ -53,7 +50,6 @@
         <div id="view-borrow" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-4 bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white">Create Request</h2>
-                
                 <div>
                     <div class="flex justify-between mb-1"><label class="text-xs font-bold text-gray-500">Asset</label><label class="text-[10px] text-brand cursor-pointer"><input type="checkbox" onchange="toggleManualInput(this)"> Manual Input</label></div>
                     <select id="positionSelect" onchange="autoFillForm()" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white outline-none"><option value="">Scanning...</option></select>
@@ -61,20 +57,13 @@
                     <div id="balanceDisplay" class="text-xs text-brand mt-1 h-4"></div>
                 </div>
                 <input type="text" id="b_tokenId" class="hidden">
-
                 <div class="grid grid-cols-2 gap-4">
                     <div><label class="text-xs text-gray-500 block mb-1">Shares</label><input type="number" id="b_shares" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white"></div>
                     <div><label class="text-xs text-gray-500 block mb-1">USDC</label><input type="number" id="b_principal" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white"></div>
                 </div>
-                
-                <div>
-                    <label class="text-xs text-gray-500 mb-2 block uppercase tracking-wider">Duration (MINUTES ⚠️)</label>
-                    <input type="number" id="b_duration" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" placeholder="60">
-                </div>
-
+                <div><label class="text-xs text-gray-500 mb-2 block uppercase tracking-wider">Duration (MINUTES ⚠️)</label><input type="number" id="b_duration" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" placeholder="60"></div>
                 <button onclick="handleCreateRequest()" id="btnCreate" class="w-full btn-primary py-3 rounded font-bold text-sm">Sign & Post</button>
             </div>
-
             <div class="lg:col-span-8 space-y-6">
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Requests (Cancel Here)</h3><div id="borrowerLoans" class="space-y-4 text-sm text-gray-500">No active debts.</div></div>
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">Incoming Offers</h3><div id="borrowerOffers" class="grid gap-4 text-sm text-gray-500">No offers.</div></div>
@@ -88,7 +77,6 @@
             </div>
             <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Active Investments (Loans Given)</h3><div id="lenderLoans" class="space-y-3 text-sm text-gray-500">No investments.</div></div>
         </div>
-
     </main>
 
     <script>
@@ -130,6 +118,9 @@
             document.getElementById("navTabs").classList.remove("hidden");
             
             switchTab('borrow'); 
+            
+            // 🔥 IDENTITY FIX: Force Proxy Load
+            console.log("🔍 Fetching Identity...");
             await initProxy();
             scanPortfolio(); 
             loadData(); 
@@ -151,24 +142,15 @@
         try {
             const res = await fetch(`${RENDER_API_URL}/portfolio?user=${userAddress}`);
             const data = await res.json();
-            
-            if (!data || data.length === 0) { 
-                select.innerHTML = '<option value="">No assets found (Check Wallet)</option>'; 
-                return; 
-            }
+            if (!data || data.length === 0) { select.innerHTML = '<option value="">No assets found</option>'; return; }
             select.innerHTML = '<option value="">-- Select Asset --</option>';
             data.forEach(p => {
                 const opt = document.createElement("option");
-                opt.value = p.asset; 
-                opt.setAttribute("data-bal", p.size); 
-                opt.setAttribute("data-price", p.livePrice);
+                opt.value = p.asset; opt.setAttribute("data-bal", p.size); opt.setAttribute("data-price", p.livePrice);
                 opt.text = `${p.title} (${Number(p.size).toFixed(2)})`;
                 select.appendChild(opt);
             });
-        } catch(e) { 
-            console.error("Scan Failed:", e);
-            select.innerHTML = '<option value="">Scan Failed (Try Manual)</option>'; 
-        }
+        } catch(e) { console.error("Scan Failed:", e); select.innerHTML = '<option value="">Scan Failed</option>'; }
     }
 
     function toggleManualInput(cb) {
@@ -186,13 +168,12 @@
         let feed="", bOffers="", bLoans="", lLoans="";
         let requestOffersMap = {}; 
 
-        // 🔥 FIX: Gather all offers with STRING keys to prevent BigInt mismatch
+        // 1. Gather Offers
         for(let i=1; i<Number(nextOff); i++) {
             try {
                 const off = await marketContract.offers(i); 
-                // off[0] = requestId, off[1] = lender, off[2] = rate, off[3] = isActive
                 if(off[3]) {
-                    const reqKey = off[0].toString(); // FORCE STRING
+                    const reqKey = off[0].toString();
                     if(!requestOffersMap[reqKey]) requestOffersMap[reqKey] = [];
                     requestOffersMap[reqKey].push({id: i, lender: off[1], rate: Number(off[2])});
                     console.log(`✅ Found Offer #${i} for Request #${reqKey}`);
@@ -200,19 +181,19 @@
             } catch(e){}
         }
 
-        // Loop Requests
+        // 2. Loop Requests
         for(let i=1; i<Number(nextId); i++) {
             try {
                 const req = await marketContract.requests(i); 
                 if (req[1].toString() === "0") continue;
                 const info = await getInfo(req[1]);
                 const link = `https://polymarket.com/event/${info.slug || 'unknown'}?tid=${req[1]}`;
-                const reqKey = i.toString(); // FORCE STRING
+                const reqKey = i.toString();
 
-                // IDENTITY CHECK
                 const IAmBorrower = isMe(req[0]);
+                if(IAmBorrower) console.log(`👤 I am Borrower for Request #${i}`);
 
-                // 1. BORROWER VIEW
+                // BORROWER VIEW
                 if (IAmBorrower) { 
                     if (req[5] && !req[6]) { // PENDING
                         bLoans += `
@@ -223,10 +204,10 @@
                             </div>
                         </div>`;
                         
-                        // 🔥 FIX: Retrieve offers using String Key
+                        // Check for Offers
                         const myOffers = requestOffersMap[reqKey] || [];
-                        if(myOffers.length > 0) console.log(`👉 Showing ${myOffers.length} offers for My Request #${reqKey}`);
-                        
+                        if(myOffers.length > 0) console.log(`👉 Injecting ${myOffers.length} offers into UI`);
+
                         myOffers.forEach(o => {
                             bOffers += `<div class="p-3 border border-green-900 rounded bg-[#051005] flex justify-between items-center mb-1">
                                 <div><div class="text-xs text-gray-400">Lender: <a href="https://polygonscan.com/address/${o.lender}" target="_blank" class="text-blue-400 underline">${o.lender.slice(0,6)}...</a></div>
@@ -234,7 +215,7 @@
                                 <button onclick="handleAcceptOffer(${o.id})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button>
                             </div>`;
                         });
-                    } else if (req[6]) { // ACTIVE LOAN
+                    } else if (req[6]) { // ACTIVE
                         const loan = await marketContract.loans(i);
                         const due = Number(loan[2]);
                         const now = Math.floor(Date.now()/1000);
@@ -255,7 +236,7 @@
                     }
                 }
 
-                // 2. LENDER FEED
+                // LENDER FEED
                 if (!IAmBorrower && req[5] && !req[6]) {
                     const competitors = requestOffersMap[reqKey] || [];
                     const bestRate = competitors.length > 0 ? Math.min(...competitors.map(c=>c.rate)) + "%" : "None";
@@ -275,15 +256,14 @@
                         ${competitors.length > 0 ? `<div class="mt-2 text-[10px] text-gray-600">Others: ${competitors.map(c=>c.rate+'%').join(', ')}</div>` : ''}
                     </div>`;
                 }
-                
-                // 3. LENDER INVESTMENTS
+
+                // LENDER INVESTMENTS
                 if (!IAmBorrower && req[6]) {
                     const loan = await marketContract.loans(i);
                     if (isMe(loan[0])) { 
                         const due = Number(loan[2]);
                         const now = Math.floor(Date.now()/1000);
                         const canSeize = now > due;
-                        
                         lLoans += `
                         <div class="p-4 border border-emerald-900/30 rounded bg-[#050608] mb-2">
                             <div class="font-bold text-white text-sm mb-1">${info.title}</div>
@@ -292,10 +272,7 @@
                                 <div class="text-xs font-mono ${canSeize ? 'text-red-500 font-bold' : 'text-emerald-400'}">
                                     ${canSeize ? "⚠️ EXPIRED" : `Due: ${Math.floor((due-now)/60)}m left`}
                                 </div>
-                                ${canSeize 
-                                    ? `<button onclick="handleSeize(${i})" class="bg-red-600 hover:bg-red-500 text-white text-xs px-3 py-1 rounded font-bold animate-pulse">SEIZE SHARES</button>`
-                                    : `<span class="text-xs text-gray-600">Wait for expiry</span>`
-                                }
+                                ${canSeize ? `<button onclick="handleSeize(${i})" class="bg-red-600 hover:bg-red-500 text-white text-xs px-3 py-1 rounded font-bold animate-pulse">SEIZE SHARES</button>` : `<span class="text-xs text-gray-600">Wait for expiry</span>`}
                             </div>
                         </div>`;
                     }
@@ -309,7 +286,6 @@
         document.getElementById("lenderLoans").innerHTML = lLoans || '<div class="text-center text-xs text-gray-500">No investments.</div>';
     }
 
-    // ACTIONS
     async function handleSeize(id) { if(!confirm("Liquidate this loan and seize shares?")) return; await signAndRelay("liquidateByTime", [id]); alert("Shares Seized! Check your Portfolio."); loadData(); }
     async function handleRepay(id) { if(!confirm("Repay this loan?")) return; await signAndRelay("repayLoan", [id]); loadData(); }
     async function handleAcceptOffer(id) { if(!confirm("Accept this offer?")) return; await signAndRelay("acceptOffer", [id]); loadData(); }
@@ -321,10 +297,8 @@
         const s = document.getElementById("b_shares").value;
         const p = document.getElementById("b_principal").value;
         const d = document.getElementById("b_duration").value; 
-        
         if(!id || !s || !p || !d) return alert("Fill all fields");
         const durationSeconds = BigInt(d) * 60n; // MINUTES MODE
-        
         await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), durationSeconds]);
         setTimeout(loadData, 2000);
     }
