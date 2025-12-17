@@ -15,12 +15,10 @@ const MARKET_ADDR = "0xe5D387e0135dab4D722838DA348e6f51E9C871Af";
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
 
-// --- 🔥 REAL API LOOKUP ONLY (No Fakes) 🔥 ---
 async function fetchMarketData(tokenId) {
     if (!tokenId || tokenId === "0") return { title: "INVALID ID (0)", slug: "" };
-
     try {
-        // Strategy 1: CLOB IDs (The reliable one)
+        // Strategy 1: CLOB IDs
         let r = await axios.get(`https://gamma-api.polymarket.com/markets?clob_token_ids=${tokenId}`);
         if (r.data && r.data.length > 0) return { title: r.data[0].question, slug: r.data[0].slug };
 
@@ -28,26 +26,26 @@ async function fetchMarketData(tokenId) {
         r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
         if (r.data && r.data.length > 0) return { title: r.data[0].question, slug: r.data[0].slug };
 
-        // Strategy 3: The Graph
+        // Strategy 3: Graph
         const hexId = toHex(BigInt(tokenId)); 
         const query = `{ questions(where: {id: "${hexId}"}) { title, slug } }`;
         const graphRes = await axios.post('https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-6', { query });
         if (graphRes.data?.data?.questions?.length > 0) {
             return { title: graphRes.data.data.questions[0].title, slug: graphRes.data.data.questions[0].slug };
         }
-
         return { title: `Unknown Asset (${tokenId.slice(0,6)}...)`, slug: "" };
     } catch (e) {
         return { title: `Unknown Asset (${tokenId.slice(0,6)}...)`, slug: "" };
     }
 }
 
+app.get('/', (req, res) => res.send('PolyLoans Relayer Active'));
+
 app.get('/market-info', async (req, res) => {
     const data = await fetchMarketData(req.query.tokenId);
     res.json(data);
 });
 
-// ... [STANDARD ENDPOINTS - KEEP THESE] ...
 async function resolveProxy(user) {
     if(!user) return null;
     const u = user.toLowerCase();
