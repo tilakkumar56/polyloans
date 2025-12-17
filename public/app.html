@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PolyLoans | Final Version</title>
+    <title>PolyLoans | DeFi Terminal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -32,6 +32,7 @@
             </div>
         </div>
         <div class="flex items-center gap-4">
+            <div id="proxyDisplay" class="hidden text-[10px] font-mono text-gray-500">Proxy: <span id="pAddr">...</span></div>
             <div id="userAddr" class="hidden font-mono text-xs text-gray-400 bg-[#0B0D12] border border-[#1E2129] px-3 py-1.5 rounded-full"></div>
             <button id="btnConnect" onclick="connectWallet()" class="btn-primary px-4 py-2 rounded text-sm font-bold shadow-lg">Connect Wallet</button>
         </div>
@@ -87,7 +88,7 @@
     const INFO_CACHE = {}; 
     const MARKET_ABI = [
         "function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)",
-        "function makeOffer(uint256,uint256) external returns (uint256)", // FIXED ABI
+        "function makeOffer(uint256,uint256) external returns (uint256)", 
         "function acceptOffer(uint256) external",
         "function repayLoan(uint256) external",
         "function liquidateByTime(uint256) external", 
@@ -98,7 +99,7 @@
         "function nextRequestId() view returns (uint256)",
         "function nextOfferId() view returns (uint256)"
     ];
-    const USDC_ABI = ["function approve(address, uint256) external", "function allowance(address, address) view returns (uint256)"];
+    const USDC_ABI = ["function approve(address, uint256) external", "function allowance(address, address) view returns (uint256)", "function balanceOf(address) view returns (uint256)"];
 
     async function connectWallet() {
         if(!window.ethereum) return alert("Install Wallet");
@@ -133,20 +134,43 @@
         document.getElementById(`tab-${t}`).classList.add('tab-active'); 
     }
 
-    // --- REPAY WITH APPROVAL CHECK ---
+    // --- 🔥 REPAY FIX: FORCE PROXY APPROVAL 🔥 ---
     async function handleRepay(id) {
-        if(!confirm("Repay Loan?")) return;
+        if(!window.myProxy) return alert("Proxy not loaded yet. Wait a second.");
+        
         const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
-        const allowance = await usdc.allowance(userAddress, MARKET_ADDR);
-        if (allowance < ethers.MaxUint256 / 2n) {
-            alert("Step 1: Approve USDC Access");
-            const txApp = await usdc.approve(MARKET_ADDR, ethers.MaxUint256);
-            await txApp.wait();
+        
+        // 1. Check if PROXY has approved Market
+        const allowance = await usdc.allowance(window.myProxy, MARKET_ADDR);
+        
+        // 2. Check if PROXY has enough balance
+        const balance = await usdc.balanceOf(window.myProxy);
+        console.log(`Diagnostic: Proxy Bal: ${ethers.formatUnits(balance,6)} | Allowance: ${ethers.formatUnits(allowance,6)}`);
+
+        if (balance == 0n) {
+            alert("❌ ERROR: Your Proxy Wallet is empty! \n\nSend USDC to: " + window.myProxy + "\n\n(It needs to pay the debt + interest)");
+            return;
         }
-        alert("Step 2: Sending Repayment...");
-        await signAndRelay("repayLoan", [id]);
-        alert("✅ Repaid!");
-        loadData();
+
+        if (allowance < ethers.MaxUint256 / 2n) {
+            if(confirm("STEP 1: The Proxy needs to Approve USDC usage.\n\nClick OK to sign the approval transaction.")) {
+                // Manually construct the Approve TX for the Proxy to sign via Relay
+                const iface = new ethers.Interface(["function approve(address, uint256)"]);
+                const data = iface.encodeFunctionData("approve", [MARKET_ADDR, ethers.MaxUint256]);
+                
+                // Send via our Relayer
+                await signAndRelayRaw(USDC_ADDR, data);
+                alert("✅ Approval Sent! Wait 5 seconds then click Repay again.");
+                return;
+            }
+        }
+        
+        // 3. If Approved & Funded, Repay
+        if(confirm("STEP 2: Repay Loan now?")) {
+            await signAndRelay("repayLoan", [id]);
+            alert("✅ SUCCESS: Loan Repaid!");
+            loadData();
+        }
     }
 
     async function loadData() {
@@ -232,38 +256,43 @@
         setTimeout(loadData, 2000);
     }
 
-    async function initProxy() { try { const r = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); const d = await r.json(); window.myProxy = d.proxy ? d.proxy.toLowerCase() : null; } catch(e) { setTimeout(initProxy, 2000); } }
-    async function getInfo(id) { if(INFO_CACHE[id]) return INFO_CACHE[id]; try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const d = await res.json(); INFO_CACHE[id]=d; return d; } catch{ return {title:"Unknown", slug:""}; } }
-    async function scanPortfolio() {
-        const select = document.getElementById("positionSelect");
-        try {
-            const res = await fetch(`${RENDER_API_URL}/portfolio?user=${userAddress}`);
-            const data = await res.json();
-            if (!data || data.length === 0) { select.innerHTML = '<option value="">No assets found</option>'; return; }
-            select.innerHTML = '<option value="">-- Select Asset --</option>';
-            data.forEach(p => { const opt = document.createElement("option"); opt.value = p.asset; opt.setAttribute("data-bal", p.size); opt.setAttribute("data-price", p.livePrice); opt.text = `${p.title} (${Number(p.size).toFixed(2)})`; select.appendChild(opt); });
-        } catch(e) { select.innerHTML = '<option value="">Scan Failed</option>'; }
+    async function initProxy() { 
+        try { 
+            const r = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); 
+            const d = await r.json(); 
+            if(d.proxy) {
+                window.myProxy = d.proxy.toLowerCase();
+                document.getElementById("pAddr").innerText = window.myProxy.slice(0,6)+"...";
+                document.getElementById("proxyDisplay").classList.remove("hidden");
+            }
+        } catch(e) { setTimeout(initProxy, 2000); } 
     }
+    
+    // Helper to relay generic tx (like approve)
+    async function signAndRelayRaw(to, data) {
+         const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
+         const meta = await nonceRes.json();
+         const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
+         const message = { to: to, value: 0, data: data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
+         const payload = JSON.stringify({ types: { EIP712Domain: [{name:"chainId",type:"uint256"}, {name:"verifyingContract",type:"address"}], SafeTx: types.SafeTx }, primaryType: "SafeTx", domain: { verifyingContract: meta.proxy, chainId: 137 }, message });
+         const sig = await ethProvider.request({ method: "eth_signTypedData_v4", params: [userAddress, payload] });
+         const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to, data, signature: sig }) });
+         const json = await res.json();
+         if(!json.success) throw new Error(json.error);
+         return json.txHash;
+    }
+
+    async function signAndRelay(func, args) {
+        const iface = new ethers.Interface(MARKET_ABI);
+        const data = iface.encodeFunctionData(func, args);
+        return await signAndRelayRaw(MARKET_ADDR, data);
+    }
+    
+    // HELPERS
+    async function getInfo(id) { if(INFO_CACHE[id]) return INFO_CACHE[id]; try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const d = await res.json(); INFO_CACHE[id]=d; return d; } catch{ return {title:"Unknown", slug:""}; } }
+    async function scanPortfolio() { const select = document.getElementById("positionSelect"); try { const res = await fetch(`${RENDER_API_URL}/portfolio?user=${userAddress}`); const data = await res.json(); if (!data || data.length === 0) { select.innerHTML = '<option value="">No assets found</option>'; return; } select.innerHTML = '<option value="">-- Select Asset --</option>'; data.forEach(p => { const opt = document.createElement("option"); opt.value = p.asset; opt.setAttribute("data-bal", p.size); opt.setAttribute("data-price", p.livePrice); opt.text = `${p.title} (${Number(p.size).toFixed(2)})`; select.appendChild(opt); }); } catch(e) { select.innerHTML = '<option value="">Scan Failed</option>'; } }
     function toggleManualInput(cb) { document.getElementById("positionSelect").style.display = cb.checked ? "none" : "block"; document.getElementById("manualTokenId").style.display = cb.checked ? "block" : "none"; document.getElementById("b_tokenId").value = ""; }
     function autoFillForm() { const sel = document.getElementById("positionSelect"); if(sel.value) { const opt = sel.selectedOptions[0]; document.getElementById("b_tokenId").value = opt.value; document.getElementById("balanceDisplay").innerText = `Bal: ${opt.getAttribute("data-bal")} | Price: $${Number(opt.getAttribute("data-price")).toFixed(2)}`; } }
-    
-    async function signAndRelay(func, args) {
-        try {
-            const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
-            const meta = await nonceRes.json();
-            const iface = new ethers.Interface(MARKET_ABI);
-            const data = iface.encodeFunctionData(func, args);
-            const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
-            const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
-            const payload = JSON.stringify({ types: { EIP712Domain: [{name:"chainId",type:"uint256"}, {name:"verifyingContract",type:"address"}], SafeTx: types.SafeTx }, primaryType: "SafeTx", domain: { verifyingContract: meta.proxy, chainId: 137 }, message });
-            const sig = await ethProvider.request({ method: "eth_signTypedData_v4", params: [userAddress, payload] });
-            const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: MARKET_ADDR, data, signature: sig }) });
-            const json = await res.json();
-            if(!json.success) throw new Error(json.error);
-            return json.txHash;
-        } catch(e) { alert("Error: " + e.message); return null; }
-    }
-    
     function isMe(addr) { if (!addr) return false; const target = addr.toLowerCase(); return (target === userAddress.toLowerCase()) || (window.myProxy && target === window.myProxy); }
     </script>
 </body>
