@@ -77,7 +77,6 @@
             </div>
             <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Active Investments (Loans Given)</h3><div id="lenderLoans" class="space-y-3 text-sm text-gray-500">No investments.</div></div>
         </div>
-
     </main>
 
     <script>
@@ -89,14 +88,14 @@
     const INFO_CACHE = {}; 
     const MARKET_ABI = [
         "function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)",
-        // 🔥 FIXED: makeOffer only takes 2 arguments now (id, rate)
         "function makeOffer(uint256,uint256) external returns (uint256)", 
         "function acceptOffer(uint256) external",
         "function repayLoan(uint256) external",
         "function liquidateByTime(uint256) external", 
         "function cancelRequest(uint256) external",
         "function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)",
-        "function loans(uint256) view returns (address, uint256, uint256, uint256)",
+        // 🔥 FIXED: Reading 6 values to map correctly
+        "function loans(uint256) view returns (address, uint256, uint256, uint256, uint256, uint256)",
         "function offers(uint256) view returns (uint256, address, uint256, bool)",
         "function nextRequestId() view returns (uint256)",
         "function nextOfferId() view returns (uint256)"
@@ -136,7 +135,6 @@
         document.getElementById(`tab-${t}`).classList.add('tab-active'); 
     }
 
-    // --- HELPER: CALCULATE REPAYMENT ---
     function calculateTotalDue(principal, rate, startTime) {
         const now = Math.floor(Date.now() / 1000);
         let timeElapsed = now - startTime;
@@ -147,7 +145,7 @@
 
     async function handleRepay(id, principal, rate, start) {
         const total = calculateTotalDue(principal, rate, start);
-        const msg = `Repay Loan?\n\nPrincipal: $${principal.toFixed(2)}\nTotal Due: $${total.toFixed(4)}\n\n(Ensure Proxy has this amount)`;
+        const msg = `Repay Loan?\n\nPrincipal: $${principal.toFixed(6)}\nTotal Due: $${total.toFixed(6)}\n\n(Ensure Proxy has this amount)`;
 
         if(!confirm(msg)) return;
         
@@ -188,9 +186,7 @@
             try {
                 const req = await marketContract.requests(i); 
                 if (req[1].toString() === "0") continue;
-
-                // --- FIX: ONLY SHOW IF ACTIVE (req[5] == true) ---
-                if (!req[5]) continue; // If inactive (Cancelled/Repaid), skip immediately.
+                if (!req[5]) continue; 
 
                 const info = await getInfo(req[1]);
                 const link = `https://polymarket.com/event/${info.slug || 'unknown'}?tid=${req[1]}`;
@@ -204,17 +200,20 @@
                         myOffers.forEach(o => { bOffers += `<div class="p-3 border border-green-900 rounded bg-[#051005] flex justify-between items-center mb-1"><div><div class="text-xs text-gray-400">Lender: ${o.lender.slice(0,6)}...</div><div class="text-sm font-bold text-green-400">${o.rate}% APR</div></div><button onclick="handleAcceptOffer(${o.id})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button></div>`; });
                     } 
                     else if (req[6]) { // ACTIVE LOAN
+                        // 🔥 UPDATED MAPPING: Start=Index 4, Duration=Index 5, Rate=Index 3
                         const loan = await marketContract.loans(i);
-                        const due = Number(loan[2]);
+                        const start = Number(loan[4]); // Was reading Index 1 (Shares) before!
+                        const duration = Number(loan[5]);
+                        const rate = Number(loan[3]);
+                        
+                        const end = start + duration;
                         const now = Math.floor(Date.now()/1000);
-                        const left = due - now;
-                        const timer = left > 0 ? `${Math.floor(left/60)}m ${left%60}s` : "EXPIRED";
+                        const left = end - now;
+                        const timer = left > 0 ? `${Math.floor(left/60)}m left` : "EXPIRED";
                         const timerClass = left < 60 ? "blink" : "text-green-400";
                         
                         const princ = Number(ethers.formatUnits(req[3],6));
-                        const rate = Number(loan[2]);
-                        const start = Number(loan[1]);
-                        const totalDue = calculateTotalDue(princ, rate, start).toFixed(2);
+                        const totalDue = calculateTotalDue(princ, rate, start).toFixed(6);
 
                         bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] mb-2"><div class="flex justify-between items-center"><div><div class="font-bold text-white text-sm">${info.title}</div><div class="text-xs font-mono mt-1">Due In: <span class="${timerClass}">${timer}</span></div><div class="text-xs text-gray-400">Owe: $${totalDue} (Incl. Interest)</div></div><button onclick="handleRepay(${i}, ${princ}, ${rate}, ${start})" class="bg-brand text-white text-xs px-3 py-1 rounded">Repay</button></div></div>`;
                     }
@@ -229,10 +228,13 @@
                 if (!IAmBorrower && req[6]) { // LENDER INVESTMENTS (Active)
                     const loan = await marketContract.loans(i);
                     if (isMe(loan[0])) { 
-                        const due = Number(loan[2]);
+                        // 🔥 UPDATED MAPPING
+                        const start = Number(loan[4]);
+                        const duration = Number(loan[5]);
+                        const end = start + duration;
                         const now = Math.floor(Date.now()/1000);
-                        const canSeize = now > due;
-                        lLoans += `<div class="p-4 border border-emerald-900/30 rounded bg-[#050608] mb-2"><div class="font-bold text-white text-sm mb-1">${info.title}</div><div class="text-xs text-gray-400 mb-2">Borrower: <a href="https://polygonscan.com/address/${req[0]}" target="_blank" class="underline">${req[0].slice(0,6)}</a></div><div class="flex justify-between items-center"><div class="text-xs font-mono ${canSeize ? 'text-red-500 font-bold' : 'text-emerald-400'}">${canSeize ? "⚠️ EXPIRED" : `Due: ${Math.floor((due-now)/60)}m left`}</div>${canSeize ? `<button onclick="handleSeize(${i})" class="bg-red-600 hover:bg-red-500 text-white text-xs px-3 py-1 rounded font-bold animate-pulse">SEIZE SHARES</button>` : `<span class="text-xs text-gray-600">Active</span>`}</div></div>`;
+                        const canSeize = now > end;
+                        lLoans += `<div class="p-4 border border-emerald-900/30 rounded bg-[#050608] mb-2"><div class="font-bold text-white text-sm mb-1">${info.title}</div><div class="text-xs text-gray-400 mb-2">Borrower: <a href="https://polygonscan.com/address/${req[0]}" target="_blank" class="underline">${req[0].slice(0,6)}</a></div><div class="flex justify-between items-center"><div class="text-xs font-mono ${canSeize ? 'text-red-500 font-bold' : 'text-emerald-400'}">${canSeize ? "⚠️ EXPIRED" : `Due: ${Math.floor((end-now)/60)}m left`}</div>${canSeize ? `<button onclick="handleSeize(${i})" class="bg-red-600 hover:bg-red-500 text-white text-xs px-3 py-1 rounded font-bold animate-pulse">SEIZE SHARES</button>` : `<span class="text-xs text-gray-600">Active</span>`}</div></div>`;
                     }
                 }
             } catch(e){ console.error(e) }
