@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PolyLoans | Diagnostics Mode</title>
+    <title>PolyLoans | DeFi Terminal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -25,7 +25,7 @@
 
     <nav class="h-20 border-b border-[#1E2129] flex items-center justify-between px-8 bg-[#020408]/90 backdrop-blur fixed w-full z-50">
         <div class="flex items-center gap-8">
-            <span class="font-bold text-lg text-white"><span class="text-brand">▲</span> PolyLoans <span class="text-[10px] text-yellow-500 bg-yellow-900/20 px-2 py-1 rounded border border-yellow-900">DIAGNOSTICS MODE</span></span>
+            <span class="font-bold text-lg text-white"><span class="text-brand">▲</span> PolyLoans <span class="text-[10px] text-gray-500 bg-gray-900 px-2 py-1 rounded">MINUTES MODE</span></span>
             <div id="navTabs" class="hidden flex gap-6 text-sm font-medium h-20 items-end pb-0">
                 <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active">Overview</button>
                 <button onclick="switchTab('borrow')" id="tab-borrow" class="tab-btn">Borrow</button>
@@ -40,6 +40,7 @@
     </nav>
 
     <main class="pt-28 p-8 max-w-7xl mx-auto w-full space-y-8">
+        <!-- OVERVIEW TAB -->
         <div id="view-overview" class="block space-y-6">
             <h2 class="text-xl font-bold text-white">Dashboard</h2>
             <div class="grid grid-cols-4 gap-6">
@@ -48,6 +49,7 @@
             </div>
         </div>
 
+        <!-- BORROW TAB -->
         <div id="view-borrow" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-4 bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white">Create Request</h2>
@@ -66,17 +68,18 @@
                 <button onclick="handleCreateRequest()" id="btnCreate" class="w-full btn-primary py-3 rounded font-bold text-sm">Sign & Post</button>
             </div>
             <div class="lg:col-span-8 space-y-6">
-                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Requests (Cancel Here)</h3><div id="borrowerLoans" class="space-y-4 text-sm text-gray-500">No active debts.</div></div>
+                <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Requests</h3><div id="borrowerLoans" class="space-y-4 text-sm text-gray-500">No active debts.</div></div>
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">Incoming Offers</h3><div id="borrowerOffers" class="grid gap-4 text-sm text-gray-500">No offers.</div></div>
             </div>
         </div>
 
+        <!-- LEND TAB -->
         <div id="view-lend" class="hidden-tab space-y-6">
             <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
                 <div class="flex justify-between items-center mb-4"><h2 class="font-bold text-white">Market Feed</h2><button onclick="loadData()" class="text-xs text-brand">Refresh</button></div>
                 <div id="marketFeed" class="space-y-4 text-gray-500 text-sm">Loading...</div>
             </div>
-            <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Active Investments (Loans Given)</h3><div id="lenderLoans" class="space-y-3 text-sm text-gray-500">No investments.</div></div>
+            <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Active Investments</h3><div id="lenderLoans" class="space-y-3 text-sm text-gray-500">No investments.</div></div>
         </div>
     </main>
 
@@ -87,9 +90,11 @@
 
     let signer, userAddress, marketContract, myProxy, ethProvider;
     const INFO_CACHE = {}; 
+    
+    // ✅ FIXED ABI: makeOffer now correctly expects 2 arguments
     const MARKET_ABI = [
         "function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)",
-        "function makeOffer(uint256,uint256,uint256) external returns (uint256)",
+        "function makeOffer(uint256,uint256) external returns (uint256)", // FIXED
         "function acceptOffer(uint256) external",
         "function repayLoan(uint256) external",
         "function liquidateByTime(uint256) external", 
@@ -135,38 +140,29 @@
         document.getElementById(`tab-${t}`).classList.add('tab-active'); 
     }
 
-    // --- 🚨 DIAGNOSTIC OFFER FUNCTION 🚨 ---
-    async function makeOffer(id) {
-        console.log(`🚀 Starting Offer Process for Request #${id}...`);
+    async function scanPortfolio() {
+        const select = document.getElementById("positionSelect");
         try {
-            const r = document.getElementById("r_"+id).value;
-            if(!r) return alert("Please enter an Interest Rate %!");
-
-            const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
-            
-            console.log("1. Approving USDC Spend...");
-            const txApprove = await u.approve(MARKET_ADDR, ethers.MaxUint256);
-            console.log("   -> Approval Hash:", txApprove.hash);
-            await txApprove.wait();
-            console.log("✅ USDC Approved.");
-
-            console.log("2. Sending Offer Transaction to Contract...");
-            const txOffer = await marketContract.makeOffer(id, Number(r));
-            console.log("   -> Offer Hash:", txOffer.hash);
-            
-            console.log("3. Waiting for Blockchain Confirmation...");
-            await txOffer.wait();
-            console.log("✅ Offer Transaction Mined!");
-
-            alert("Success! Offer Sent. Refreshing Data...");
-            loadData();
-
-        } catch(e) {
-            console.error("❌ OFFER FAILED:", e);
-            const err = e.reason || e.message || JSON.stringify(e);
-            alert("❌ ERROR: " + err);
-        }
+            const res = await fetch(`${RENDER_API_URL}/portfolio?user=${userAddress}`);
+            const data = await res.json();
+            if (!data || data.length === 0) { select.innerHTML = '<option value="">No assets found</option>'; return; }
+            select.innerHTML = '<option value="">-- Select Asset --</option>';
+            data.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p.asset; opt.setAttribute("data-bal", p.size); opt.setAttribute("data-price", p.livePrice);
+                opt.text = `${p.title} (${Number(p.size).toFixed(2)})`;
+                select.appendChild(opt);
+            });
+        } catch(e) { select.innerHTML = '<option value="">Scan Failed</option>'; }
     }
+
+    function toggleManualInput(cb) {
+        document.getElementById("positionSelect").style.display = cb.checked ? "none" : "block";
+        document.getElementById("manualTokenId").style.display = cb.checked ? "block" : "none";
+        document.getElementById("b_tokenId").value = ""; 
+    }
+
+    function autoFillForm() { const sel = document.getElementById("positionSelect"); if(sel.value) { const opt = sel.selectedOptions[0]; document.getElementById("b_tokenId").value = opt.value; document.getElementById("balanceDisplay").innerText = `Bal: ${opt.getAttribute("data-bal")} | Price: $${Number(opt.getAttribute("data-price")).toFixed(2)}`; } }
 
     async function loadData() {
         if(!marketContract) return;
@@ -180,7 +176,7 @@
             try {
                 const off = await marketContract.offers(i); 
                 if(off[3]) {
-                    const reqKey = off[0].toString();
+                    const reqKey = off[0].toString(); 
                     if(!requestOffersMap[reqKey]) requestOffersMap[reqKey] = [];
                     requestOffersMap[reqKey].push({id: i, lender: off[1], rate: Number(off[2])});
                 }
@@ -195,10 +191,8 @@
                 const info = await getInfo(req[1]);
                 const link = `https://polymarket.com/event/${info.slug || 'unknown'}?tid=${req[1]}`;
                 const reqKey = i.toString();
-
                 const IAmBorrower = isMe(req[0]);
 
-                // BORROWER VIEW
                 if (IAmBorrower) { 
                     if (req[5] && !req[6]) { // PENDING
                         bLoans += `
@@ -217,7 +211,7 @@
                                 <button onclick="handleAcceptOffer(${o.id})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button>
                             </div>`;
                         });
-                    } else if (req[6]) { // ACTIVE LOAN
+                    } else if (req[6]) { // ACTIVE
                         const loan = await marketContract.loans(i);
                         const due = Number(loan[2]);
                         const now = Math.floor(Date.now()/1000);
@@ -237,8 +231,7 @@
                     }
                 }
 
-                // LENDER FEED
-                if (!IAmBorrower && req[5] && !req[6]) {
+                if (!IAmBorrower && req[5] && !req[6]) { // LENDER FEED
                     const competitors = requestOffersMap[reqKey] || [];
                     const bestRate = competitors.length > 0 ? Math.min(...competitors.map(c=>c.rate)) + "%" : "None";
                     feed += `
@@ -258,8 +251,7 @@
                     </div>`;
                 }
 
-                // LENDER INVESTMENTS
-                if (!IAmBorrower && req[6]) {
+                if (!IAmBorrower && req[6]) { // LENDER INVESTMENTS
                     const loan = await marketContract.loans(i);
                     if (isMe(loan[0])) { 
                         const due = Number(loan[2]);
@@ -287,10 +279,31 @@
         document.getElementById("lenderLoans").innerHTML = lLoans || '<div class="text-center text-xs text-gray-500">No investments.</div>';
     }
 
+    // ACTIONS
     async function handleSeize(id) { if(!confirm("Liquidate this loan and seize shares?")) return; await signAndRelay("liquidateByTime", [id]); alert("Shares Seized! Check your Portfolio."); loadData(); }
     async function handleRepay(id) { if(!confirm("Repay this loan?")) return; await signAndRelay("repayLoan", [id]); loadData(); }
     async function handleAcceptOffer(id) { if(!confirm("Accept this offer?")) return; await signAndRelay("acceptOffer", [id]); loadData(); }
     async function handleCancelRequest(id) { if(!confirm("Cancel request?")) return; await signAndRelay("cancelRequest", [id]); loadData(); }
+
+    async function makeOffer(id) {
+        console.log(`🚀 Making Offer on Request #${id}`);
+        try {
+            const r = document.getElementById("r_"+id).value;
+            if(!r) return alert("Enter Rate");
+            const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+            console.log("1. Approving USDC...");
+            const txApp = await u.approve(MARKET_ADDR, ethers.MaxUint256);
+            await txApp.wait();
+            console.log("2. Sending Offer...");
+            const txOff = await marketContract.makeOffer(id, Number(r));
+            await txOff.wait();
+            alert("Offer Sent!"); 
+            loadData();
+        } catch(e) {
+            console.error("Offer Failed:", e);
+            alert("Error: " + (e.reason || e.message));
+        }
+    }
 
     async function handleCreateRequest() {
         let id = document.getElementById("manualTokenId").value || document.getElementById("positionSelect").value;
@@ -298,7 +311,7 @@
         const p = document.getElementById("b_principal").value;
         const d = document.getElementById("b_duration").value; 
         if(!id || !s || !p || !d) return alert("Fill all fields");
-        const durationSeconds = BigInt(d) * 60n; // MINUTES MODE
+        const durationSeconds = BigInt(d) * 60n; 
         await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), durationSeconds]);
         setTimeout(loadData, 2000);
     }
@@ -309,30 +322,13 @@
             const d = await r.json(); 
             if(d.proxy) {
                 window.myProxy = d.proxy.toLowerCase();
-                document.getElementById("proxyStatus").classList.remove("hidden");
-                document.getElementById("proxyAddr").innerText = window.myProxy.slice(0,6)+"...";
                 console.log("✅ Identity Verified: Proxy is " + window.myProxy);
-            } else {
-                console.warn("⚠️ Proxy not found, trying again...");
-                setTimeout(initProxy, 2000);
             }
-        } catch(e) { console.error("Proxy fetch failed", e); setTimeout(initProxy, 2000); } 
+        } catch(e) { console.error("Proxy fetch failed", e); } 
     }
     
-    // KEEP HELPERS (scanPortfolio, toggleManualInput, autoFillForm, getInfo, signAndRelay, isMe) EXACTLY AS BEFORE
-    async function scanPortfolio() {
-        const select = document.getElementById("positionSelect");
-        try {
-            const res = await fetch(`${RENDER_API_URL}/portfolio?user=${userAddress}`);
-            const data = await res.json();
-            if (!data || data.length === 0) { select.innerHTML = '<option value="">No assets found</option>'; return; }
-            select.innerHTML = '<option value="">-- Select Asset --</option>';
-            data.forEach(p => { const opt = document.createElement("option"); opt.value = p.asset; opt.setAttribute("data-bal", p.size); opt.setAttribute("data-price", p.livePrice); opt.text = `${p.title} (${Number(p.size).toFixed(2)})`; select.appendChild(opt); });
-        } catch(e) { console.error("Scan Failed:", e); select.innerHTML = '<option value="">Scan Failed</option>'; }
-    }
-    function toggleManualInput(cb) { document.getElementById("positionSelect").style.display = cb.checked ? "none" : "block"; document.getElementById("manualTokenId").style.display = cb.checked ? "block" : "none"; document.getElementById("b_tokenId").value = ""; }
-    function autoFillForm() { const sel = document.getElementById("positionSelect"); if(sel.value) { const opt = sel.selectedOptions[0]; document.getElementById("b_tokenId").value = opt.value; document.getElementById("balanceDisplay").innerText = `Bal: ${opt.getAttribute("data-bal")} | Price: $${Number(opt.getAttribute("data-price")).toFixed(2)}`; } }
     async function getInfo(id) { if(INFO_CACHE[id]) return INFO_CACHE[id]; try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const d = await res.json(); INFO_CACHE[id]=d; return d; } catch{ return {title:"Unknown", slug:""}; } }
+    
     async function signAndRelay(func, args) {
         try {
             const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
@@ -340,6 +336,7 @@
             if(!meta.proxy) return alert("No Proxy Found (Connect Wallet first)");
             const iface = new ethers.Interface(MARKET_ABI);
             const data = iface.encodeFunctionData(func, args);
+            const domain = { verifyingContract: meta.proxy, chainId: 137 };
             const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
             const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
             const payload = JSON.stringify({ types: { EIP712Domain: [{name:"chainId",type:"uint256"}, {name:"verifyingContract",type:"address"}], SafeTx: types.SafeTx }, primaryType: "SafeTx", domain, message });
@@ -350,7 +347,12 @@
             return json.txHash;
         } catch(e) { alert("Error: " + e.message); return null; }
     }
-    function isMe(addr) { if (!addr) return false; const target = addr.toLowerCase(); return (target === userAddress.toLowerCase()) || (window.myProxy && target === window.myProxy); }
+    
+    function isMe(addr) { 
+        if (!addr) return false;
+        const target = addr.toLowerCase();
+        return (target === userAddress.toLowerCase()) || (window.myProxy && target === window.myProxy); 
+    }
     </script>
 </body>
 </html>
