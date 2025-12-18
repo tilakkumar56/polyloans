@@ -39,7 +39,6 @@
     </nav>
 
     <main class="pt-28 p-8 max-w-7xl mx-auto w-full space-y-8">
-        <!-- OVERVIEW TAB -->
         <div id="view-overview" class="block space-y-6">
             <h2 class="text-xl font-bold text-white">Dashboard</h2>
             <div class="grid grid-cols-4 gap-6">
@@ -48,7 +47,6 @@
             </div>
         </div>
 
-        <!-- BORROW TAB -->
         <div id="view-borrow" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-4 bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white">New Request</h2>
@@ -70,15 +68,13 @@
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Requests & Active Debts</h3><div id="borrowerLoans" class="space-y-4 text-sm text-gray-500">No active debts.</div></div>
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">Incoming Offers</h3><div id="borrowerOffers" class="grid gap-4 text-sm text-gray-500">No offers.</div></div>
                 
-                <!-- HISTORY SECTION -->
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 opacity-60 hover:opacity-100 transition">
                     <h3 class="font-bold text-gray-400 mb-4 text-xs uppercase">History (Repaid Loans)</h3>
-                    <div id="borrowerHistory" class="space-y-2 text-sm text-gray-600">No repaid loans found.</div>
+                    <div id="borrowerHistory" class="space-y-2 text-sm text-gray-600">No history found.</div>
                 </div>
             </div>
         </div>
 
-        <!-- LEND TAB -->
         <div id="view-lend" class="hidden-tab space-y-6">
             <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
                 <div class="flex justify-between items-center mb-4"><h2 class="font-bold text-white">Market Feed</h2><button onclick="loadData()" class="text-xs text-brand">Refresh</button></div>
@@ -143,11 +139,10 @@
         document.getElementById(`tab-${t}`).classList.add('tab-active'); 
     }
 
-    // --- HELPER: CALCULATE REPAYMENT ---
     function calculateTotalDue(principal, rate, startTime) {
         const now = Math.floor(Date.now() / 1000);
         let timeElapsed = now - startTime;
-        if (timeElapsed < 86400) timeElapsed = 86400; // Min 1 Day
+        if (timeElapsed < 86400) timeElapsed = 86400; // Min 1 Day Interest
         const interest = (principal * rate * timeElapsed) / (365 * 86400 * 100);
         return principal + interest;
     }
@@ -178,23 +173,61 @@
         return 0;
     }
 
+    // --- 🔥 ROBUST REPAY FUNCTION 🔥 ---
     async function handleRepay(id, principal, rate, start) {
         const total = calculateTotalDue(principal, rate, start);
-        if(!confirm(`Repay Loan #${id}?\n\nTotal Due: $${total.toFixed(6)}\n\n(Ensure Proxy has this amount)`)) return;
+        const repayAmountWei = ethers.parseUnits(total.toFixed(6), 6); 
+
+        // 1. CONFIRM
+        if(!confirm(`Repay Loan #${id}?\n\nTotal Due: $${total.toFixed(6)}\n(Includes 1-Day Min. Interest)`)) return;
         
+        // 2. CHECK PROXY BALANCE
         const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+        const proxyBal = await usdc.balanceOf(window.myProxy);
+        
+        if (proxyBal < repayAmountWei) {
+            alert(`❌ ERROR: Proxy Insufficient Funds!\n\nProxy Has: $${ethers.formatUnits(proxyBal, 6)}\nNeeds: $${total.toFixed(6)}\n\nPlease send USDC to your Proxy: ${window.myProxy}`);
+            return;
+        }
+
+        // 3. CHECK ALLOWANCE
         const allowance = await usdc.allowance(window.myProxy, MARKET_ADDR);
         
-        if (allowance < ethers.MaxUint256 / 2n) {
-            alert("Step 1: Approve USDC Access");
-            const txApp = await usdc.approve(MARKET_ADDR, ethers.MaxUint256);
-            await txApp.wait();
+        if (allowance < repayAmountWei) {
+            alert("Step 1: Authorization Required.\nPlease sign to approve USDC spending.");
+            
+            // Encode 'approve' call for USDC
+            const iface = new ethers.Interface(USDC_ABI);
+            const data = iface.encodeFunctionData("approve", [MARKET_ADDR, ethers.MaxUint256]);
+            
+            // Send to Proxy via Relayer (Target = USDC Contract)
+            await signAndRelayGeneric(USDC_ADDR, data);
+            
+            alert("✅ Approval Sent! Please wait ~10 seconds for blockchain confirmation, then click 'Repay' again.");
+            return; // STOP HERE to prevent race condition
         }
         
-        alert("Step 2: Sending Repayment...");
+        // 4. SEND REPAYMENT
+        alert("Step 2: Processing Repayment...");
         await signAndRelay("repayLoan", [id]);
-        alert("✅ Loan Repaid!");
+        alert("✅ Loan Repayment TX Sent! Status will update shortly.");
         loadData();
+    }
+
+    // Generic Helper for Non-Market calls (like USDC approve)
+    async function signAndRelayGeneric(toAddr, data) {
+        try {
+            const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
+            const meta = await nonceRes.json();
+            const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
+            const message = { to: toAddr, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
+            const payload = JSON.stringify({ types: { EIP712Domain: [{name:"chainId",type:"uint256"}, {name:"verifyingContract",type:"address"}], SafeTx: types.SafeTx }, primaryType: "SafeTx", domain: { verifyingContract: meta.proxy, chainId: 137 }, message });
+            const sig = await ethProvider.request({ method: "eth_signTypedData_v4", params: [userAddress, payload] });
+            const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: toAddr, data, signature: sig }) });
+            const json = await res.json();
+            if(!json.success) throw new Error(json.error);
+            return json.txHash;
+        } catch(e) { alert("Error: " + e.message); return null; }
     }
 
     async function loadData() {
@@ -225,7 +258,7 @@
                 const IAmBorrower = isMe(req[0]);
 
                 if (IAmBorrower) { 
-                    if (req[5]) { // IS ACTIVE
+                    if (req[5]) { // ACTIVE
                         if (!req[6]) { // PENDING REQUEST
                             bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608] mb-2"><div class="flex justify-between items-start mb-2"><div><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span><a href="${link}" target="_blank" class="hover:text-brand hover:underline">${info.title}</a></div><div class="text-xs text-orange-400">Waiting for Lender...</div></div><button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded">Cancel</button></div></div>`;
                             const myOffers = requestOffersMap[reqKey] || [];
@@ -245,7 +278,7 @@
 
                             bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] mb-2"><div class="flex justify-between items-center"><div><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span>${info.title}</div><div class="text-xs font-mono mt-1">Due In: <span class="${timerClass}">${timer}</span></div><div class="text-xs text-gray-400">Owe: $${totalDue} (Incl. Interest)</div></div><button onclick="handleRepay(${i}, ${princ}, ${rate}, ${start})" class="bg-brand text-white text-xs px-3 py-1 rounded">Repay</button></div></div>`;
                         }
-                    } else { // HISTORY (NOT ACTIVE)
+                    } else { // HISTORY
                         // 🔥 FILTER: Only show Repaid Loans (isLoan=true), Ignore Cancelled (isLoan=false)
                         if (req[6]) {
                             bHist += `<div class="p-3 border border-gray-800 rounded bg-[#0B0D12] flex justify-between items-center mb-1"><div class="font-bold text-white text-xs truncate w-2/3">#${i} ${info.title}</div><div class="text-[10px] text-green-500">✅ REPAID</div></div>`;
@@ -299,26 +332,19 @@
     function toggleManualInput(cb) { document.getElementById("positionSelect").style.display = cb.checked ? "none" : "block"; document.getElementById("manualTokenId").style.display = cb.checked ? "block" : "none"; document.getElementById("b_tokenId").value = ""; }
     function autoFillForm() { const sel = document.getElementById("positionSelect"); if(sel.value) { const opt = sel.selectedOptions[0]; document.getElementById("b_tokenId").value = opt.value; document.getElementById("balanceDisplay").innerText = `Bal: ${opt.getAttribute("data-bal")} | Price: $${Number(opt.getAttribute("data-price")).toFixed(2)}`; } }
     
+    // 🔥 CORE SIGNING FUNCTION FOR MARKET CALLS 🔥
     async function signAndRelay(func, args) {
         try {
             const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
             const meta = await nonceRes.json();
             const iface = new ethers.Interface(MARKET_ABI);
             const data = iface.encodeFunctionData(func, args);
-            const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
-            const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
-            const payload = JSON.stringify({ types: { EIP712Domain: [{name:"chainId",type:"uint256"}, {name:"verifyingContract",type:"address"}], SafeTx: types.SafeTx }, primaryType: "SafeTx", domain: { verifyingContract: meta.proxy, chainId: 137 }, message });
-            const sig = await ethProvider.request({ method: "eth_signTypedData_v4", params: [userAddress, payload] });
-            const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: MARKET_ADDR, data, signature: sig }) });
-            const json = await res.json();
-            if(!json.success) throw new Error(json.error);
-            return json.txHash;
+            // Market calls go here
+            return await signAndRelayGeneric(MARKET_ADDR, data);
         } catch(e) { alert("Error: " + e.message); return null; }
     }
     
     function isMe(addr) { if (!addr) return false; const target = addr.toLowerCase(); return (target === userAddress.toLowerCase()) || (window.myProxy && target === window.myProxy); }
-    async function forceKill() { const id = document.getElementById("killId").value; if(confirm(`KILL #${id}?`)) { const tx = await signAndRelay("cancelRequest", [id]); if(tx) { alert("🔥 Request Killed."); loadData(); } } }
-
     </script>
 </body>
 </html>
