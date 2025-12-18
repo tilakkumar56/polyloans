@@ -39,6 +39,7 @@
     </nav>
 
     <main class="pt-28 p-8 max-w-7xl mx-auto w-full space-y-8">
+        <!-- OVERVIEW TAB -->
         <div id="view-overview" class="block space-y-6">
             <h2 class="text-xl font-bold text-white">Dashboard</h2>
             <div class="grid grid-cols-4 gap-6">
@@ -47,6 +48,7 @@
             </div>
         </div>
 
+        <!-- BORROW TAB -->
         <div id="view-borrow" class="hidden-tab grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-4 bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white">New Request</h2>
@@ -68,19 +70,21 @@
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Requests & Active Debts</h3><div id="borrowerLoans" class="space-y-4 text-sm text-gray-500">No active debts.</div></div>
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">Incoming Offers</h3><div id="borrowerOffers" class="grid gap-4 text-sm text-gray-500">No offers.</div></div>
                 
+                <!-- HISTORY SECTION -->
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 opacity-60 hover:opacity-100 transition">
-                    <h3 class="font-bold text-gray-400 mb-4 text-xs uppercase">History (Repaid Loans)</h3>
+                    <h3 class="font-bold text-gray-400 mb-4 text-xs uppercase">History (Repaid Only)</h3>
                     <div id="borrowerHistory" class="space-y-2 text-sm text-gray-600">No history found.</div>
                 </div>
             </div>
         </div>
 
+        <!-- LEND TAB -->
         <div id="view-lend" class="hidden-tab space-y-6">
             <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6">
                 <div class="flex justify-between items-center mb-4"><h2 class="font-bold text-white">Market Feed</h2><button onclick="loadData()" class="text-xs text-brand">Refresh</button></div>
                 <div id="marketFeed" class="space-y-4 text-gray-500 text-sm">Loading...</div>
             </div>
-            <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Active Investments (Loans Given)</h3><div id="lenderLoans" class="space-y-3 text-sm text-gray-500">No investments.</div></div>
+            <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Active Investments</h3><div id="lenderLoans" class="space-y-3 text-sm text-gray-500">No investments.</div></div>
         </div>
     </main>
 
@@ -139,26 +143,31 @@
         document.getElementById(`tab-${t}`).classList.add('tab-active'); 
     }
 
+    // --- HELPER: CALCULATE REPAYMENT ---
     function calculateTotalDue(principal, rate, startTime) {
         const now = Math.floor(Date.now() / 1000);
         let timeElapsed = now - startTime;
-        if (timeElapsed < 86400) timeElapsed = 86400; // Min 1 Day Interest
+        if (timeElapsed < 86400) timeElapsed = 86400; // Min 1 Day
         const interest = (principal * rate * timeElapsed) / (365 * 86400 * 100);
         return principal + interest;
     }
 
+    // --- HELPER: CALCULATE PROFIT FOR LENDER ---
     function calculateProfit(principal, rate, duration) {
+        // duration is in Seconds
         const interest = (principal * rate * duration) / (365 * 86400 * 100);
         return interest;
     }
 
+    // --- UI UPDATER FOR LENDER ---
     function updateProfitPreview(id, principal, duration) {
         const rateInput = document.getElementById(`r_${id}`);
         const rate = rateInput.value;
         const profitDiv = document.getElementById(`profit_${id}`);
+        
         if (rate && principal && duration) {
             const profit = calculateProfit(Number(principal), Number(rate), Number(duration));
-            profitDiv.innerText = `Est. Profit: +$${profit.toFixed(6)}`;
+            profitDiv.innerText = `Est. Return: +$${profit.toFixed(6)}`;
             profitDiv.classList.add("text-emerald-400", "font-mono", "text-[10px]", "mt-1");
         } else {
             profitDiv.innerText = "";
@@ -178,10 +187,8 @@
         const total = calculateTotalDue(principal, rate, start);
         const repayAmountWei = ethers.parseUnits(total.toFixed(6), 6); 
 
-        // 1. CONFIRM
         if(!confirm(`Repay Loan #${id}?\n\nTotal Due: $${total.toFixed(6)}\n(Includes 1-Day Min. Interest)`)) return;
         
-        // 2. CHECK PROXY BALANCE
         const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
         const proxyBal = await usdc.balanceOf(window.myProxy);
         
@@ -190,31 +197,22 @@
             return;
         }
 
-        // 3. CHECK ALLOWANCE
         const allowance = await usdc.allowance(window.myProxy, MARKET_ADDR);
-        
         if (allowance < repayAmountWei) {
             alert("Step 1: Authorization Required.\nPlease sign to approve USDC spending.");
-            
-            // Encode 'approve' call for USDC
             const iface = new ethers.Interface(USDC_ABI);
             const data = iface.encodeFunctionData("approve", [MARKET_ADDR, ethers.MaxUint256]);
-            
-            // Send to Proxy via Relayer (Target = USDC Contract)
             await signAndRelayGeneric(USDC_ADDR, data);
-            
-            alert("✅ Approval Sent! Please wait ~10 seconds for blockchain confirmation, then click 'Repay' again.");
-            return; // STOP HERE to prevent race condition
+            alert("✅ Approval Sent! Wait 10 seconds then click Repay again.");
+            return; 
         }
         
-        // 4. SEND REPAYMENT
-        alert("Step 2: Processing Repayment...");
+        alert("Step 2: Sending Repayment...");
         await signAndRelay("repayLoan", [id]);
         alert("✅ Loan Repayment TX Sent! Status will update shortly.");
         loadData();
     }
 
-    // Generic Helper for Non-Market calls (like USDC approve)
     async function signAndRelayGeneric(toAddr, data) {
         try {
             const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
@@ -256,30 +254,38 @@
                 const link = `https://polymarket.com/event/${info.slug || 'unknown'}?tid=${req[1]}`;
                 const reqKey = i.toString();
                 const IAmBorrower = isMe(req[0]);
+                const duration = Number(req[4]); // Seconds
 
                 if (IAmBorrower) { 
-                    if (req[5]) { // ACTIVE
-                        if (!req[6]) { // PENDING REQUEST
-                            bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608] mb-2"><div class="flex justify-between items-start mb-2"><div><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span><a href="${link}" target="_blank" class="hover:text-brand hover:underline">${info.title}</a></div><div class="text-xs text-orange-400">Waiting for Lender...</div></div><button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded">Cancel</button></div></div>`;
-                            const myOffers = requestOffersMap[reqKey] || [];
-                            myOffers.forEach(o => { bOffers += `<div class="p-3 border border-green-900 rounded bg-[#051005] flex justify-between items-center mb-1"><div><div class="text-xs text-gray-400">Lender: ${o.lender.slice(0,6)}...</div><div class="text-sm font-bold text-green-400">${o.rate}% APR</div></div><button onclick="handleAcceptOffer(${o.id})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button></div>`; });
-                        } else { // ACTIVE LOAN
-                            const loan = await marketContract.loans(i);
-                            const start = findStartTime(loan);
-                            const duration = Number(req[4]);
-                            const rate = Number(loan[3]) || 5;
-                            const end = start + duration;
-                            const now = Math.floor(Date.now()/1000);
-                            const left = end - now;
-                            const timer = left > 0 ? `${Math.floor(left/60)}m ${left%60}s` : "EXPIRED";
-                            const timerClass = left < 60 ? "text-red-500 blink" : "text-green-400";
-                            const princ = Number(ethers.formatUnits(req[3],6));
-                            const totalDue = calculateTotalDue(princ, rate, start).toFixed(6);
+                    if (req[5] && !req[6]) { // PENDING
+                        bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608] mb-2"><div class="flex justify-between items-start mb-2"><div><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span><a href="${link}" target="_blank" class="hover:text-brand hover:underline">${info.title}</a></div><div class="text-xs text-orange-400">Waiting for Lender...</div></div><button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded">Cancel</button></div></div>`;
+                        const myOffers = requestOffersMap[reqKey] || [];
+                        myOffers.forEach(o => { 
+                            const principal = Number(ethers.formatUnits(req[3],6));
+                            // 🔥 SHOW COST PREVIEW 🔥
+                            const cost = calculateProfit(principal, o.rate, duration); 
+                            const total = principal + cost;
+                            bOffers += `<div class="p-3 border border-green-900 rounded bg-[#051005] flex justify-between items-center mb-1">
+                                <div><div class="text-xs text-gray-400">Lender: ${o.lender.slice(0,6)}...</div><div class="text-sm font-bold text-green-400">${o.rate}% APR</div>
+                                <div class="text-[10px] text-gray-500 mt-1">Cost: +$${cost.toFixed(4)} Interest</div></div>
+                                <button onclick="handleAcceptOffer(${o.id})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button>
+                            </div>`; 
+                        });
+                    } else if (req[6]) { // ACTIVE LOAN
+                        const loan = await marketContract.loans(i);
+                        const start = findStartTime(loan);
+                        const rate = Number(loan[3]) || 5;
+                        const end = start + duration;
+                        const now = Math.floor(Date.now()/1000);
+                        const left = end - now;
+                        const timer = left > 0 ? `${Math.floor(left/60)}m ${left%60}s` : "EXPIRED";
+                        const timerClass = left < 60 ? "text-red-500 blink" : "text-green-400";
+                        const princ = Number(ethers.formatUnits(req[3],6));
+                        const totalDue = calculateTotalDue(princ, rate, start).toFixed(6);
 
-                            bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] mb-2"><div class="flex justify-between items-center"><div><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span>${info.title}</div><div class="text-xs font-mono mt-1">Due In: <span class="${timerClass}">${timer}</span></div><div class="text-xs text-gray-400">Owe: $${totalDue} (Incl. Interest)</div></div><button onclick="handleRepay(${i}, ${princ}, ${rate}, ${start})" class="bg-brand text-white text-xs px-3 py-1 rounded">Repay</button></div></div>`;
-                        }
+                        bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] mb-2"><div class="flex justify-between items-center"><div><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span>${info.title}</div><div class="text-xs font-mono mt-1">Due In: <span class="${timerClass}">${timer}</span></div><div class="text-xs text-gray-400">Owe: $${totalDue} (Incl. Interest)</div></div><button onclick="handleRepay(${i}, ${princ}, ${rate}, ${start})" class="bg-brand text-white text-xs px-3 py-1 rounded">Repay</button></div></div>`;
                     } else { // HISTORY
-                        // 🔥 FILTER: Only show Repaid Loans (isLoan=true), Ignore Cancelled (isLoan=false)
+                        // 🔥 FILTER: Only show REPAID loans, ignore cancelled
                         if (req[6]) {
                             bHist += `<div class="p-3 border border-gray-800 rounded bg-[#0B0D12] flex justify-between items-center mb-1"><div class="font-bold text-white text-xs truncate w-2/3">#${i} ${info.title}</div><div class="text-[10px] text-green-500">✅ REPAID</div></div>`;
                         }
@@ -294,20 +300,21 @@
                     feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] mb-2"><div class="mb-2"><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span><a href="${link}" target="_blank" class="hover:text-brand hover:underline">${info.title}</a></div><div class="flex gap-4 text-xs text-gray-500 mt-1"><span>Borrower: ${req[0].slice(0,6)}...</span><span>Ask: $${principal}</span></div></div><div class="flex flex-col"><div class="flex gap-2"><input id="r_${i}" placeholder="APR %" class="w-16 bg-black text-white text-center text-xs rounded border border-gray-700" oninput="updateProfitPreview(${i}, ${principal}, ${duration})"><button onclick="makeOffer(${i})" class="bg-brand px-4 py-1 rounded text-xs text-white font-bold">Offer Loan</button></div><div id="profit_${i}"></div></div>${competitors.length > 0 ? `<div class="mt-2 text-[10px] text-gray-600">Others: ${competitors.map(c=>c.rate+'%').join(', ')}</div>` : ''}</div>`;
                 }
 
-                if (!IAmBorrower && req[6] && req[5]) { // LENDER INVESTMENTS
+                if (!IAmBorrower && req[6]) { // LENDER INVESTMENTS
                     const loan = await marketContract.loans(i);
                     const lender = loan[0] || loan[1]; 
                     let realLender = "";
                     for(let k=0; k<loan.length; k++) if(typeof loan[k] === 'string' && loan[k].startsWith('0x')) realLender = loan[k];
 
                     if (isMe(realLender)) { 
-                        const start = findStartTime(loan);
-                        const duration = Number(req[4]);
-                        const end = start + duration;
-                        const now = Math.floor(Date.now()/1000);
-                        const canSeize = now > end;
-                        const timeLeft = Math.floor((end-now)/60);
-                        lLoans += `<div class="p-4 border border-emerald-900/30 rounded bg-[#050608] mb-2"><div class="font-bold text-white text-sm mb-1">#${i} ${info.title}</div><div class="text-xs text-gray-400 mb-2">Borrower: <a href="https://polygonscan.com/address/${req[0]}" target="_blank" class="underline">${req[0].slice(0,6)}</a></div><div class="flex justify-between items-center"><div class="text-xs font-mono ${canSeize ? 'text-red-500 font-bold' : 'text-emerald-400'}">${canSeize ? "⚠️ EXPIRED" : `Due: ${timeLeft}m left`}</div>${canSeize ? `<button onclick="handleSeize(${i})" class="bg-red-600 hover:bg-red-500 text-white text-xs px-3 py-1 rounded font-bold animate-pulse">SEIZE SHARES</button>` : `<span class="text-xs text-gray-600">Active</span>`}</div></div>`;
+                        if (req[5]) { // ACTIVE
+                            const start = findStartTime(loan);
+                            const end = start + duration;
+                            const now = Math.floor(Date.now()/1000);
+                            const canSeize = now > end;
+                            const timeLeft = Math.floor((end-now)/60);
+                            lLoans += `<div class="p-4 border border-emerald-900/30 rounded bg-[#050608] mb-2"><div class="font-bold text-white text-sm mb-1">#${i} ${info.title}</div><div class="text-xs text-gray-400 mb-2">Borrower: <a href="https://polygonscan.com/address/${req[0]}" target="_blank" class="underline">${req[0].slice(0,6)}</a></div><div class="flex justify-between items-center"><div class="text-xs font-mono ${canSeize ? 'text-red-500 font-bold' : 'text-emerald-400'}">${canSeize ? "⚠️ EXPIRED" : `Due: ${timeLeft}m left`}</div>${canSeize ? `<button onclick="handleSeize(${i})" class="bg-red-600 hover:bg-red-500 text-white text-xs px-3 py-1 rounded font-bold animate-pulse">SEIZE SHARES</button>` : `<span class="text-xs text-gray-600">Active</span>`}</div></div>`;
+                        }
                     }
                 }
             } catch(e){ console.error(e) }
@@ -332,19 +339,26 @@
     function toggleManualInput(cb) { document.getElementById("positionSelect").style.display = cb.checked ? "none" : "block"; document.getElementById("manualTokenId").style.display = cb.checked ? "block" : "none"; document.getElementById("b_tokenId").value = ""; }
     function autoFillForm() { const sel = document.getElementById("positionSelect"); if(sel.value) { const opt = sel.selectedOptions[0]; document.getElementById("b_tokenId").value = opt.value; document.getElementById("balanceDisplay").innerText = `Bal: ${opt.getAttribute("data-bal")} | Price: $${Number(opt.getAttribute("data-price")).toFixed(2)}`; } }
     
-    // 🔥 CORE SIGNING FUNCTION FOR MARKET CALLS 🔥
     async function signAndRelay(func, args) {
         try {
             const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
             const meta = await nonceRes.json();
             const iface = new ethers.Interface(MARKET_ABI);
             const data = iface.encodeFunctionData(func, args);
-            // Market calls go here
-            return await signAndRelayGeneric(MARKET_ADDR, data);
+            const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
+            const message = { to: MARKET_ADDR, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
+            const payload = JSON.stringify({ types: { EIP712Domain: [{name:"chainId",type:"uint256"}, {name:"verifyingContract",type:"address"}], SafeTx: types.SafeTx }, primaryType: "SafeTx", domain: { verifyingContract: meta.proxy, chainId: 137 }, message });
+            const sig = await ethProvider.request({ method: "eth_signTypedData_v4", params: [userAddress, payload] });
+            const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: MARKET_ADDR, data, signature: sig }) });
+            const json = await res.json();
+            if(!json.success) throw new Error(json.error);
+            return json.txHash;
         } catch(e) { alert("Error: " + e.message); return null; }
     }
     
     function isMe(addr) { if (!addr) return false; const target = addr.toLowerCase(); return (target === userAddress.toLowerCase()) || (window.myProxy && target === window.myProxy); }
+    async function forceKill() { const id = document.getElementById("killId").value; if(confirm(`KILL #${id}?`)) { const tx = await signAndRelay("cancelRequest", [id]); if(tx) { alert("🔥 Request Killed."); loadData(); } } }
+
     </script>
 </body>
 </html>
