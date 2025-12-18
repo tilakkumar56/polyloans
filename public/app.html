@@ -143,31 +143,31 @@
         document.getElementById(`tab-${t}`).classList.add('tab-active'); 
     }
 
-    // --- HELPER: CALCULATE REPAYMENT ---
+    // --- 🔥 FIX: SYNCED MATH 🔥 ---
     function calculateTotalDue(principal, rate, startTime) {
         const now = Math.floor(Date.now() / 1000);
         let timeElapsed = now - startTime;
-        if (timeElapsed < 86400) timeElapsed = 86400; // Min 1 Day
-        const interest = (principal * rate * timeElapsed) / (365 * 86400 * 100);
+        if (timeElapsed < 86400) timeElapsed = 86400; // Force 1 Day Min
+        
+        // Exact Solidity Math: (P * R * T) / (365 days * 100)
+        // Note: 100 is because Rate is % (e.g. 10 = 10%)
+        const interest = (principal * rate * timeElapsed) / (31536000 * 100); 
         return principal + interest;
     }
 
-    // --- HELPER: CALCULATE PROFIT FOR LENDER ---
     function calculateProfit(principal, rate, duration) {
-        // duration is in Seconds
-        const interest = (principal * rate * duration) / (365 * 86400 * 100);
+        // Duration in seconds
+        const interest = (principal * rate * duration) / (31536000 * 100);
         return interest;
     }
 
-    // --- UI UPDATER FOR LENDER ---
     function updateProfitPreview(id, principal, duration) {
         const rateInput = document.getElementById(`r_${id}`);
         const rate = rateInput.value;
         const profitDiv = document.getElementById(`profit_${id}`);
-        
         if (rate && principal && duration) {
-            const profit = calculateProfit(Number(principal), Number(rate), Number(duration));
-            profitDiv.innerText = `Est. Return: +$${profit.toFixed(6)}`;
+            const profit = calculateProfit(Number(principal), Number(rate), Number(duration) * 60);
+            profitDiv.innerText = `Est. Profit: +$${profit.toFixed(6)}`;
             profitDiv.classList.add("text-emerald-400", "font-mono", "text-[10px]", "mt-1");
         } else {
             profitDiv.innerText = "";
@@ -182,50 +182,27 @@
         return 0;
     }
 
-    // --- 🔥 ROBUST REPAY FUNCTION 🔥 ---
     async function handleRepay(id, principal, rate, start) {
         const total = calculateTotalDue(principal, rate, start);
-        const repayAmountWei = ethers.parseUnits(total.toFixed(6), 6); 
+        // Add 5% buffer to displayed estimate to avoid "Not Enough" error due to time lag
+        const safeTotal = total * 1.05; 
+        const msg = `Repay Loan #${id}?\n\nEst. Total: $${total.toFixed(6)}\n(We request $${safeTotal.toFixed(6)} allowance just in case)`;
 
-        if(!confirm(`Repay Loan #${id}?\n\nTotal Due: $${total.toFixed(6)}\n(Includes 1-Day Min. Interest)`)) return;
+        if(!confirm(msg)) return;
         
         const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
-        const proxyBal = await usdc.balanceOf(window.myProxy);
-        
-        if (proxyBal < repayAmountWei) {
-            alert(`❌ ERROR: Proxy Insufficient Funds!\n\nProxy Has: $${ethers.formatUnits(proxyBal, 6)}\nNeeds: $${total.toFixed(6)}\n\nPlease send USDC to your Proxy: ${window.myProxy}`);
-            return;
-        }
-
         const allowance = await usdc.allowance(window.myProxy, MARKET_ADDR);
-        if (allowance < repayAmountWei) {
-            alert("Step 1: Authorization Required.\nPlease sign to approve USDC spending.");
-            const iface = new ethers.Interface(USDC_ABI);
-            const data = iface.encodeFunctionData("approve", [MARKET_ADDR, ethers.MaxUint256]);
-            await signAndRelayGeneric(USDC_ADDR, data);
-            alert("✅ Approval Sent! Wait 10 seconds then click Repay again.");
-            return; 
+        const requiredWei = ethers.parseUnits(safeTotal.toFixed(6), 6);
+
+        if (allowance < requiredWei) {
+            alert("Step 1: Approve USDC Access");
+            await (await usdc.approve(MARKET_ADDR, ethers.MaxUint256)).wait();
         }
         
         alert("Step 2: Sending Repayment...");
         await signAndRelay("repayLoan", [id]);
-        alert("✅ Loan Repayment TX Sent! Status will update shortly.");
+        alert("✅ Loan Repaid!");
         loadData();
-    }
-
-    async function signAndRelayGeneric(toAddr, data) {
-        try {
-            const nonceRes = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
-            const meta = await nonceRes.json();
-            const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
-            const message = { to: toAddr, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
-            const payload = JSON.stringify({ types: { EIP712Domain: [{name:"chainId",type:"uint256"}, {name:"verifyingContract",type:"address"}], SafeTx: types.SafeTx }, primaryType: "SafeTx", domain: { verifyingContract: meta.proxy, chainId: 137 }, message });
-            const sig = await ethProvider.request({ method: "eth_signTypedData_v4", params: [userAddress, payload] });
-            const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: toAddr, data, signature: sig }) });
-            const json = await res.json();
-            if(!json.success) throw new Error(json.error);
-            return json.txHash;
-        } catch(e) { alert("Error: " + e.message); return null; }
     }
 
     async function loadData() {
@@ -254,7 +231,6 @@
                 const link = `https://polymarket.com/event/${info.slug || 'unknown'}?tid=${req[1]}`;
                 const reqKey = i.toString();
                 const IAmBorrower = isMe(req[0]);
-                const duration = Number(req[4]); // Seconds
 
                 if (IAmBorrower) { 
                     if (req[5] && !req[6]) { // PENDING
@@ -262,18 +238,20 @@
                         const myOffers = requestOffersMap[reqKey] || [];
                         myOffers.forEach(o => { 
                             const principal = Number(ethers.formatUnits(req[3],6));
-                            // 🔥 SHOW COST PREVIEW 🔥
-                            const cost = calculateProfit(principal, o.rate, duration); 
+                            const durationMins = Number(req[4]); // In Minutes Mode: 60 = 60 mins.
+                            const cost = calculateProfit(principal, o.rate, durationMins * 60); 
                             const total = principal + cost;
                             bOffers += `<div class="p-3 border border-green-900 rounded bg-[#051005] flex justify-between items-center mb-1">
-                                <div><div class="text-xs text-gray-400">Lender: ${o.lender.slice(0,6)}...</div><div class="text-sm font-bold text-green-400">${o.rate}% APR</div>
-                                <div class="text-[10px] text-gray-500 mt-1">Cost: +$${cost.toFixed(4)} Interest</div></div>
+                                <div><div class="text-xs text-gray-400">Lender: <a href="https://polygonscan.com/address/${o.lender}" target="_blank" class="text-brand underline">${o.lender.slice(0,6)}...</a></div>
+                                <div class="text-sm font-bold text-green-400">${o.rate}% APR</div>
+                                <div class="text-[10px] text-gray-500">Est. Repay: $${total.toFixed(4)}</div></div>
                                 <button onclick="handleAcceptOffer(${o.id})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button>
                             </div>`; 
                         });
                     } else if (req[6]) { // ACTIVE LOAN
                         const loan = await marketContract.loans(i);
                         const start = findStartTime(loan);
+                        const duration = Number(req[4]);
                         const rate = Number(loan[3]) || 5;
                         const end = start + duration;
                         const now = Math.floor(Date.now()/1000);
@@ -285,7 +263,6 @@
 
                         bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] mb-2"><div class="flex justify-between items-center"><div><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span>${info.title}</div><div class="text-xs font-mono mt-1">Due In: <span class="${timerClass}">${timer}</span></div><div class="text-xs text-gray-400">Owe: $${totalDue} (Incl. Interest)</div></div><button onclick="handleRepay(${i}, ${princ}, ${rate}, ${start})" class="bg-brand text-white text-xs px-3 py-1 rounded">Repay</button></div></div>`;
                     } else { // HISTORY
-                        // 🔥 FILTER: Only show REPAID loans, ignore cancelled
                         if (req[6]) {
                             bHist += `<div class="p-3 border border-gray-800 rounded bg-[#0B0D12] flex justify-between items-center mb-1"><div class="font-bold text-white text-xs truncate w-2/3">#${i} ${info.title}</div><div class="text-[10px] text-green-500">✅ REPAID</div></div>`;
                         }
@@ -309,6 +286,7 @@
                     if (isMe(realLender)) { 
                         if (req[5]) { // ACTIVE
                             const start = findStartTime(loan);
+                            const duration = Number(req[4]);
                             const end = start + duration;
                             const now = Math.floor(Date.now()/1000);
                             const canSeize = now > end;
@@ -321,9 +299,9 @@
         }
 
         document.getElementById("marketFeed").innerHTML = feed || '<div class="text-center text-xs text-gray-500 py-4">No requests.</div>';
-        document.getElementById("borrowerLoans").innerHTML = bLoans || '<div class="text-center text-xs text-gray-500 py-4">No active debts.</div>';
-        document.getElementById("borrowerOffers").innerHTML = bOffers || '<div class="text-center text-xs text-gray-500 py-4">No offers.</div>';
-        document.getElementById("lenderLoans").innerHTML = lLoans || '<div class="text-center text-xs text-gray-500 py-4">No investments.</div>';
+        document.getElementById("borrowerLoans").innerHTML = bLoans || '<div class="text-center text-xs text-gray-500">No active debts.</div>';
+        document.getElementById("borrowerOffers").innerHTML = bOffers || '<div class="text-center text-xs text-gray-500">No offers.</div>';
+        document.getElementById("lenderLoans").innerHTML = lLoans || '<div class="text-center text-xs text-gray-500">No investments.</div>';
         document.getElementById("borrowerHistory").innerHTML = bHist || '<div class="text-center text-xs text-gray-600">No history found.</div>';
     }
 
