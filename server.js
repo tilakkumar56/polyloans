@@ -12,7 +12,7 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // CONFIG
-const MARKET_ADDR = "0x7a8386eED804a342fBE0231CcA7F9e8124eC786B"; 
+const MARKET_ADDR = "0x06fdEA1a0BC8eDa81a9F122f88d82946FF328970"; 
 const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
 const API_KEY = process.env.POLY_API_KEY;
