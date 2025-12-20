@@ -20,12 +20,12 @@ const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 
-// --- 🔥 "SHERLOCK HOLMES" PROXY RESOLVER 🔥 ---
+// --- 🔥 ULTIMATE PROXY RESOLVER 🔥 ---
 async function resolveProxy(user) {
     if(!user) return null;
     const u = user.toLowerCase();
     
-    // Method 1: Standard Gamma Profile (Fastest)
+    // Strategy 1: Gamma API (Polymarket Standard)
     try {
         const r = await axios.get(`https://gamma-api.polymarket.com/users/${u}`);
         if (r.data?.proxyWallet) {
@@ -34,27 +34,25 @@ async function resolveProxy(user) {
         }
     } catch(e) {}
 
-    // Method 2: Trade Activity Backdoor (Most Reliable for New Wallets)
-    // We look at your last 20 actions. If you traded, the proxy is listed there.
+    // Strategy 2: Gnosis Safe Global Registry (The "Backdoor")
+    // This asks the Gnosis infrastructure directly for safes owned by this wallet
     try {
-        console.log("🕵️‍♂️ Gamma failed. Scanning Trade History for Proxy...");
-        const r = await axios.get(`https://data-api.polymarket.com/activity?user=${u}&limit=20`);
-        if (Array.isArray(r.data)) {
-            // Look for ANY item that mentions a proxyWallet
-            const match = r.data.find(item => item.proxyWallet);
-            if (match) {
-                console.log(`✅ Proxy Found (History): ${match.proxyWallet}`);
-                return match.proxyWallet.toLowerCase();
-            }
+        console.log(`🕵️‍♂️ Checking Gnosis Safe Registry for ${u}...`);
+        const r = await axios.get(`https://safe-transaction-polygon.safe.global/api/v1/owners/${u}/safes/`);
+        if (r.data?.safes && r.data.safes.length > 0) {
+            // Polymarket users usually have only 1 safe, take the first one
+            const safe = r.data.safes[0];
+            console.log(`✅ Proxy Found (Safe Registry): ${safe}`);
+            return safe.toLowerCase();
         }
-    } catch(e) { console.log("History scan error:", e.message); }
+    } catch(e) { console.log("Gnosis Registry lookup failed"); }
 
     console.log("❌ CRITICAL: No Proxy Found via any method.");
     return null;
 }
 
 // --- ENDPOINTS ---
-app.get('/', (req, res) => res.send('Sherlock Scanner Online'));
+app.get('/', (req, res) => res.send('Gnosis Scanner Online'));
 
 app.get('/market-info', async (req, res) => {
     try {
@@ -88,7 +86,7 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- 🔥 DUAL SCANNER 🔥 ---
+// --- 🔥 UNIVERSAL SCANNER (DUAL MODE) 🔥 ---
 app.get('/portfolio', async (req, res) => {
     const { user } = req.query;
     if(!user) return res.json([]);
@@ -104,14 +102,11 @@ app.get('/portfolio', async (req, res) => {
 
     let allPos = [];
     
-    // Scan both addresses
+    // Scan both addresses using Official Data API
     for(const t of targets) {
         try {
             const r = await axios.get(`https://data-api.polymarket.com/positions?user=${t}`);
-            if(Array.isArray(r.data)) {
-                // Deduplicate assets (sometimes API returns duplicates)
-                r.data.forEach(p => allPos.push(p));
-            }
+            if(Array.isArray(r.data)) allPos.push(...r.data);
         } catch(e) {
             console.log(`Failed to scan ${t}: ${e.message}`);
         }
