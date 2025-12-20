@@ -84,7 +84,8 @@
     </main>
 
     <script>
-    const MARKET_ADDR = "0x7a8386eED804a342fBE0231CcA7F9e8124eC786B"; 
+    // 🔥 UPDATE THIS ADDRESS 🔥
+    const MARKET_ADDR = "0x08190EAE6A7497804C9315D8e46CB217e9a6244f"; 
     const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
     const POLY_ADDR = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"; 
     const RENDER_API_URL = "https://polyloans-api.onrender.com"; 
@@ -102,6 +103,7 @@
         "function acceptExtension(uint256) external",
         "function rejectExtension(uint256) external",
         "function buyoutLoan(uint256) external",
+        "function cancelOffer(uint256) external", // 🔥 Added this
         "function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)",
         "function loans(uint256) view returns (address, uint256, uint256, uint256)",
         "function offers(uint256) view returns (uint256, address, uint256, bool)",
@@ -199,15 +201,13 @@
         loadData();
     }
 
-    // 🔥 THIS WAS MISSING - NOW RESTORED 🔥
     async function handleAcceptOffer(id) { 
         if(!confirm("Accept Offer?")) return; 
         await signAndRelay("acceptOffer", [id]); 
         loadData(); 
     }
 
-    // 🔥 ROBUST MAKE OFFER 🔥
-    async function makeOffer(id) {
+    async function makeOffer(id, principal) {
         try {
             const r = document.getElementById("r_"+id).value;
             if(!r) return alert("Please enter an Interest Rate (APR %)");
@@ -216,15 +216,15 @@
             // Check Allowance
             const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
             const allowance = await u.allowance(userAddress, MARKET_ADDR);
-            
-            if (allowance < ethers.parseUnits("10000", 6)) { 
+            const princWei = ethers.parseUnits(principal.toString(), 6);
+
+            if (allowance < princWei) { 
                 alert("Step 1: Approve USDC spending...");
                 const tx1 = await u.approve(MARKET_ADDR, ethers.MaxUint256);
                 await tx1.wait();
             }
 
             alert("Step 2: Sending Offer...");
-            // Ensure BigInt
             const tx2 = await marketContract.makeOffer(id, BigInt(r));
             alert("✅ Offer Sent!");
             await tx2.wait();
@@ -235,6 +235,15 @@
         }
     }
 
+    // 🔥 Added Cancel Function 🔥
+    async function handleCancelOffer(id) { 
+        if(!confirm("Cancel Offer?")) return; 
+        const tx = await marketContract.cancelOffer(id); 
+        await tx.wait(); 
+        loadData(); 
+    }
+
+    // 🔥 Added Extension Buttons 🔥
     async function handleAcceptExt(id) { if(!confirm("Accept Extension?")) return; await signAndRelay("acceptExtension", [id]); alert("Extended!"); loadData(); }
     async function handleRejectExt(id) { if(!confirm("Reject Extension?")) return; await signAndRelay("rejectExtension", [id]); alert("Rejected!"); loadData(); }
     async function handleAutoExtend(id) { if(!confirm("Auto-Extend?")) return; await signAndRelay("acceptExtension", [id]); alert("Auto-Extended!"); loadData(); }
@@ -315,12 +324,8 @@
                             const timeLeft = Math.floor((end-now)/60);
                             const princ = Number(ethers.formatUnits(req[3],6));
                             const totalDue = calculateTotalDue(princ, rate, duration).toFixed(6);
-                            
                             let autoExtBtn = "";
-                            if (extData && !extData.isRejected && (now > extData.reqTime + 86400)) {
-                                autoExtBtn = `<button onclick="handleAutoExtend(${i})" class="bg-blue-600 text-white text-[10px] px-2 py-1 rounded">Auto-Extend (24h Passed)</button>`;
-                            }
-
+                            if (extData && !extData.isRejected && (now > extData.reqTime + 86400)) autoExtBtn = `<button onclick="handleAutoExtend(${i})" class="bg-blue-600 text-white text-[10px] px-2 py-1 rounded">Auto-Extend (24h Passed)</button>`;
                             bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] mb-2"><div class="flex justify-between items-center"><div><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span>${info.title} <span class="text-success">${side}</span></div><div class="text-xs font-mono mt-1 ${timeLeft<0?'text-red-500':'text-green-400'}">Due: ${timeLeft<0?'EXPIRED':Math.floor(timeLeft/1440)+'d left'}</div><div class="text-xs text-gray-400">Fixed Owe: $${totalDue}</div></div><div class="flex flex-col gap-2 items-end"><button onclick="handleRepay(${i}, ${princ}, ${rate}, ${duration})" class="bg-brand text-black text-xs px-4 py-1 rounded font-bold">Repay Full</button><button onclick="handleExtend(${i})" class="text-[10px] text-gray-500 hover:text-white">Extend</button>${autoExtBtn}</div></div></div>`;
                         }
                     } else if (req[6]) { // HISTORY
@@ -331,13 +336,19 @@
                 if (!IAmBorrower && req[5] && !req[6]) { // LENDER FEED
                     const principal = Number(ethers.formatUnits(req[3],6));
                     const durationDays = duration / 86400; 
-                    feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] mb-2"><div class="mb-2"><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span>${info.title} <span class="text-success">${side}</span></div><div class="flex gap-4 text-xs text-gray-500 mt-1"><span>Ask: $${principal}</span><span>Dur: ${durationDays.toFixed(1)} Days</span></div></div><div class="flex gap-2"><input id="r_${i}" placeholder="APR %" class="w-16 bg-black text-white text-center text-xs rounded border border-gray-700" oninput="updateProfitPreview(${i}, ${principal}, ${durationDays})"><button onclick="makeOffer(${i})" class="bg-brand px-4 py-1 rounded text-xs text-white font-bold text-black">Offer Loan</button></div><div id="profit_${i}"></div></div>`;
+                    
+                    // Show "Cancel" button if I already made an offer
+                    let myExistingOffer = (requestOffersMap[reqKey] || []).find(o => isMe(o.lender));
+                    let actionBtn = myExistingOffer 
+                        ? `<button onclick="handleCancelOffer(${myExistingOffer.id})" class="bg-red-900 text-red-200 border border-red-500 px-4 py-1 rounded text-xs font-bold">Cancel Offer</button>`
+                        : `<button onclick="makeOffer(${i}, ${principal})" class="bg-brand px-4 py-1 rounded text-xs text-white font-bold text-black">Offer Loan</button>`;
+
+                    feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] mb-2"><div class="mb-2"><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span>${info.title} <span class="text-success">${side}</span></div><div class="flex gap-4 text-xs text-gray-500 mt-1"><span>Ask: $${principal}</span><span>Dur: ${durationDays.toFixed(1)} Days</span></div></div><div class="flex gap-2"><input id="r_${i}" placeholder="APR %" class="w-16 bg-black text-white text-center text-xs rounded border border-gray-700" oninput="updateProfitPreview(${i}, ${principal}, ${durationDays})">${actionBtn}</div><div id="profit_${i}"></div></div>`;
                 }
 
-                // 🔥 BUYOUT FEED FOR LENDERS (Rejected Extensions) 🔥
                 if (!IAmBorrower && req[6] && req[5] && extData && extData.isRejected) {
                     const now = Math.floor(Date.now()/1000);
-                    if (now < extData.rejTime + 86400) { // Within 24h Buyout Window
+                    if (now < extData.rejTime + 86400) { 
                         const principal = Number(ethers.formatUnits(req[3],6));
                         feed += `<div class="p-4 border border-yellow-500/50 rounded bg-[#1A1500] mb-2"><div class="mb-2"><div class="font-bold text-yellow-500 text-sm">🔥 BUYOUT OPPORTUNITY #${i}</div><div class="text-white text-xs">${info.title}</div><div class="text-[10px] text-gray-400">Principal: $${principal} | Ends in: ${Math.floor((extData.rejTime+86400 - now)/60)}m</div></div><button onclick="handleBuyout(${i}, ${principal})" class="w-full bg-yellow-600 text-black font-bold text-xs py-2 rounded">BUY LOAN (Pay Principal)</button></div>`;
                     }
@@ -353,13 +364,17 @@
                         const princ = Number(ethers.formatUnits(req[3],6));
                         const currentVal = calculateTotalDue(princ, rate, duration).toFixed(6);
                         
+                        // 🔥 SHOW DURATION 🔥
+                        const daysLeft = Math.floor((end - now) / 86400);
+                        
+                        // 🔥 SHOW EXTENSION BUTTONS 🔥
                         let extHtml = "";
                         if (extData && !extData.isRejected) {
                             const extDays = extData.duration / 86400;
                             extHtml = `<div class="mt-2 p-2 bg-blue-900/30 border border-blue-500/50 rounded flex justify-between items-center"><span class="text-xs text-blue-300">Request: +${extDays} Days</span><div class="flex gap-2"><button onclick="handleAcceptExt(${i})" class="bg-blue-600 text-white text-[10px] px-2 py-1 rounded">Accept</button><button onclick="handleRejectExt(${i})" class="bg-red-600 text-white text-[10px] px-2 py-1 rounded">Reject</button></div></div>`;
                         }
 
-                        lLoans += `<div class="p-4 border border-emerald-900/30 rounded bg-[#050608] mb-2"><div class="font-bold text-white text-sm mb-1">#${i} ${info.title} <span class="text-success">${side}</span></div><div class="text-xs text-gray-400 mb-2">Borrower: ${req[0].slice(0,6)}</div><div class="flex justify-between items-center"><div><div class="text-xs font-mono text-emerald-400">Val: $${currentVal}</div></div>${canSeize ? `<button onclick="handleSeize(${i})" class="bg-red-600 hover:bg-red-500 text-white text-xs px-3 py-1 rounded font-bold animate-pulse">SEIZE</button>` : `<span class="text-xs text-gray-600">Active</span>`}</div>${extHtml}</div>`;
+                        lLoans += `<div class="p-4 border border-emerald-900/30 rounded bg-[#050608] mb-2"><div class="font-bold text-white text-sm mb-1">#${i} ${info.title} <span class="text-success">${side}</span></div><div class="text-xs text-gray-400 mb-2">Borrower: ${req[0].slice(0,6)} | Duration: ${duration/86400} Days</div><div class="flex justify-between items-center"><div><div class="text-xs font-mono text-emerald-400">Val: $${currentVal}</div></div>${canSeize ? `<button onclick="handleSeize(${i})" class="bg-red-600 hover:bg-red-500 text-white text-xs px-3 py-1 rounded font-bold animate-pulse">SEIZE</button>` : `<span class="text-xs text-gray-600">Active</span>`}</div>${extHtml}</div>`;
                     }
                 }
             } catch(e){ console.error(e) }
