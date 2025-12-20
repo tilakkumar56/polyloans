@@ -20,12 +20,12 @@ const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 
-// --- 🔥 TITANIUM PROXY RESOLVER 🔥 ---
+// --- 🔥 "SHERLOCK HOLMES" PROXY RESOLVER 🔥 ---
 async function resolveProxy(user) {
     if(!user) return null;
     const u = user.toLowerCase();
     
-    // Strategy 1: Gamma API (Best)
+    // Method 1: Standard Gamma Profile (Fastest)
     try {
         const r = await axios.get(`https://gamma-api.polymarket.com/users/${u}`);
         if (r.data?.proxyWallet) {
@@ -34,21 +34,27 @@ async function resolveProxy(user) {
         }
     } catch(e) {}
 
-    // Strategy 2: Data API Activity (Fallback)
+    // Method 2: Trade Activity Backdoor (Most Reliable for New Wallets)
+    // We look at your last 20 actions. If you traded, the proxy is listed there.
     try {
-        const r = await axios.get(`https://data-api.polymarket.com/activity?user=${u}&limit=1`);
-        if (Array.isArray(r.data) && r.data.length > 0 && r.data[0].proxyWallet) {
-            console.log(`✅ Proxy Found (Activity): ${r.data[0].proxyWallet}`);
-            return r.data[0].proxyWallet.toLowerCase();
+        console.log("🕵️‍♂️ Gamma failed. Scanning Trade History for Proxy...");
+        const r = await axios.get(`https://data-api.polymarket.com/activity?user=${u}&limit=20`);
+        if (Array.isArray(r.data)) {
+            // Look for ANY item that mentions a proxyWallet
+            const match = r.data.find(item => item.proxyWallet);
+            if (match) {
+                console.log(`✅ Proxy Found (History): ${match.proxyWallet}`);
+                return match.proxyWallet.toLowerCase();
+            }
         }
-    } catch(e) {}
+    } catch(e) { console.log("History scan error:", e.message); }
 
-    console.log("❌ No Proxy Found (User might need to Log In to Polymarket.com once)");
+    console.log("❌ CRITICAL: No Proxy Found via any method.");
     return null;
 }
 
 // --- ENDPOINTS ---
-app.get('/', (req, res) => res.send('Titanium Scanner Online'));
+app.get('/', (req, res) => res.send('Sherlock Scanner Online'));
 
 app.get('/market-info', async (req, res) => {
     try {
@@ -82,7 +88,7 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- 🔥 UNIVERSAL SCANNER (DATA API) 🔥 ---
+// --- 🔥 DUAL SCANNER 🔥 ---
 app.get('/portfolio', async (req, res) => {
     const { user } = req.query;
     if(!user) return res.json([]);
@@ -98,11 +104,14 @@ app.get('/portfolio', async (req, res) => {
 
     let allPos = [];
     
-    // Scan both addresses using Official Data API
+    // Scan both addresses
     for(const t of targets) {
         try {
             const r = await axios.get(`https://data-api.polymarket.com/positions?user=${t}`);
-            if(Array.isArray(r.data)) allPos.push(...r.data);
+            if(Array.isArray(r.data)) {
+                // Deduplicate assets (sometimes API returns duplicates)
+                r.data.forEach(p => allPos.push(p));
+            }
         } catch(e) {
             console.log(`Failed to scan ${t}: ${e.message}`);
         }
