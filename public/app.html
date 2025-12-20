@@ -84,9 +84,7 @@
     </main>
 
     <script>
-    // 🔥 LATEST CONTRACT ADDRESS 🔥
     const MARKET_ADDR = "0x7a8386eED804a342fBE0231CcA7F9e8124eC786B"; 
-    
     const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
     const POLY_ADDR = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"; 
     const RENDER_API_URL = "https://polyloans-api.onrender.com"; 
@@ -201,11 +199,48 @@
         loadData();
     }
 
-    // 🔥 EXTENSION ACTIONS 🔥
-    async function handleAcceptExt(id) { if(!confirm("Accept Extension?\n(Get paid interest now, reset clock)")) return; await signAndRelay("acceptExtension", [id]); alert("Extended!"); loadData(); }
-    async function handleRejectExt(id) { if(!confirm("Reject Extension?\n(Starts 24h Buyout Window)")) return; await signAndRelay("rejectExtension", [id]); alert("Rejected!"); loadData(); }
-    async function handleAutoExtend(id) { if(!confirm("Auto-Extend? (24h passed)")) return; await signAndRelay("acceptExtension", [id]); alert("Auto-Extended!"); loadData(); }
-    async function handleBuyout(id, princ) { if(!confirm(`Buyout Loan #${id} for $${princ}?`)) return; await signAndRelay("buyoutLoan", [id]); alert("Bought!"); loadData(); }
+    // 🔥 THIS WAS MISSING - NOW RESTORED 🔥
+    async function handleAcceptOffer(id) { 
+        if(!confirm("Accept Offer?")) return; 
+        await signAndRelay("acceptOffer", [id]); 
+        loadData(); 
+    }
+
+    // 🔥 ROBUST MAKE OFFER 🔥
+    async function makeOffer(id) {
+        try {
+            const r = document.getElementById("r_"+id).value;
+            if(!r) return alert("Please enter an Interest Rate (APR %)");
+            if(!signer) return alert("Wallet disconnected.");
+            
+            // Check Allowance
+            const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+            const allowance = await u.allowance(userAddress, MARKET_ADDR);
+            
+            if (allowance < ethers.parseUnits("10000", 6)) { 
+                alert("Step 1: Approve USDC spending...");
+                const tx1 = await u.approve(MARKET_ADDR, ethers.MaxUint256);
+                await tx1.wait();
+            }
+
+            alert("Step 2: Sending Offer...");
+            // Ensure BigInt
+            const tx2 = await marketContract.makeOffer(id, BigInt(r));
+            alert("✅ Offer Sent!");
+            await tx2.wait();
+            loadData();
+        } catch (e) {
+            console.error(e);
+            alert("Error: " + (e.reason || e.message));
+        }
+    }
+
+    async function handleAcceptExt(id) { if(!confirm("Accept Extension?")) return; await signAndRelay("acceptExtension", [id]); alert("Extended!"); loadData(); }
+    async function handleRejectExt(id) { if(!confirm("Reject Extension?")) return; await signAndRelay("rejectExtension", [id]); alert("Rejected!"); loadData(); }
+    async function handleAutoExtend(id) { if(!confirm("Auto-Extend?")) return; await signAndRelay("acceptExtension", [id]); alert("Auto-Extended!"); loadData(); }
+    async function handleBuyout(id, princ) { if(!confirm(`Buyout Loan #${id}?`)) return; await signAndRelay("buyoutLoan", [id]); alert("Bought!"); loadData(); }
+    async function handleSeize(id) { if(!confirm("Liquidate shares?")) return; await signAndRelay("liquidateByTime", [id]); alert("Seized!"); loadData(); }
+    async function handleExtend(id) { const d = prompt("New Duration (Days):"); if(!d) return; await signAndRelay("requestExtension", [id, BigInt(d)*86400n]); alert("Requested!"); }
 
     async function handleCreateRequest() { 
         let id = document.getElementById("manualTokenId").value || document.getElementById("positionSelect").value; 
@@ -223,34 +258,6 @@
         }
         await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), BigInt(d) * 86400n]); 
         setTimeout(loadData, 2000); 
-    }
-
-    // 🔥 FIXED MAKE OFFER 🔥
-    async function makeOffer(id) {
-        try {
-            const r = document.getElementById("r_"+id).value;
-            if(!r) return alert("Please enter an Interest Rate (APR %)");
-            if(!signer) return alert("Wallet disconnected.");
-
-            const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
-            const allowance = await u.allowance(userAddress, MARKET_ADDR);
-            
-            if (allowance < ethers.parseUnits("10000", 6)) { 
-                alert("Step 1: Approve USDC spending...");
-                const tx1 = await u.approve(MARKET_ADDR, ethers.MaxUint256);
-                await tx1.wait();
-            }
-
-            alert("Step 2: Sending Offer...");
-            const tx2 = await marketContract.makeOffer(id, BigInt(r));
-            alert("✅ Offer Sent!");
-            await tx2.wait();
-            loadData();
-
-        } catch (e) {
-            console.error("OFFER ERROR:", e);
-            alert("Transaction Failed: " + (e.reason || e.message || "Check Console"));
-        }
     }
 
     async function loadData() {
