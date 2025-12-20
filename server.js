@@ -12,57 +12,51 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // CONFIG
-const MARKET_ADDR = "0x06fdEA1a0BC8eDa81a9F122f88d82946FF328970"; 
-const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
+const MARKET_ADDR = "0x08190EAE6A7497804C9315D8e46CB217e9a6244f"; 
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
 const API_KEY = process.env.POLY_API_KEY;
 const API_SECRET = process.env.POLY_API_SECRET;
 const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
-const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
 
-// --- 🔥 API LOOKUP 🔥 ---
-async function fetchMarketTitle(tokenId) {
-    if (!tokenId || tokenId === "0") return "INVALID ID (0)";
+// --- 🔥 SMART PROXY RESOLVER 🔥 ---
+async function resolveProxy(user) {
+    if(!user) return null;
+    const u = user.toLowerCase();
 
+    // Strategy 1: Check Polymarket Gamma API (Most Reliable)
     try {
-        // Strategy 1: CLOB Token IDs
+        const r = await axios.get(`https://gamma-api.polymarket.com/users/${u}`);
+        if (r.data && r.data.proxyWallet) {
+            console.log(`✅ Found Proxy via Gamma: ${r.data.proxyWallet}`);
+            return r.data.proxyWallet.toLowerCase();
+        }
+    } catch(e) { /* Ignore 404 */ }
+
+    // Strategy 2: Check Data API Profile
+    try {
+        const r = await axios.get(`https://data-api.polymarket.com/positions?user=${u}`);
+        // Sometimes the API returns the proxy in the first position metadata
+        if (Array.isArray(r.data) && r.data.length > 0 && r.data[0].proxyWallet) {
+            return r.data[0].proxyWallet.toLowerCase();
+        }
+    } catch(e) {}
+
+    console.log("⚠️ No Proxy Found. Scanning EOA directly.");
+    return null;
+}
+
+// --- API LOOKUP ---
+async function fetchMarketTitle(tokenId) {
+    if (!tokenId || tokenId === "0") return "INVALID ID";
+    try {
         let r = await axios.get(`https://gamma-api.polymarket.com/markets?clob_token_ids=${tokenId}`);
-        if (r.data && r.data.length > 0) return r.data[0].question;
-
-        // Strategy 2: Standard Token ID
+        if (r.data?.length > 0) return r.data[0].question;
         r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
-        if (r.data && r.data.length > 0) return r.data[0].question;
-
-        // Strategy 3: The Graph
-        const hexId = toHex(BigInt(tokenId)); 
-        const query = `
-        {
-            questions(where: {id: "${hexId}"}) { title }
-            fixedProductMarketMakers(where: {collateralToken: "${hexId}"}) { title }
-            conditions(where: {id: "${hexId}"}) { questionId }
-        }
-        `;
-        const graphRes = await axios.post('https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-6', { query });
-        const data = graphRes.data.data;
-
-        if (data.questions && data.questions.length > 0) return data.questions[0].title;
-        if (data.fixedProductMarketMakers && data.fixedProductMarketMakers.length > 0) return data.fixedProductMarketMakers[0].title;
-        
-        if (data.conditions && data.conditions.length > 0) {
-             const qId = data.conditions[0].questionId;
-             const qRes = await axios.post('https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-6', { 
-                 query: `{ questions(where: {id: "${qId}"}) { title } }` 
-             });
-             if (qRes.data.data.questions.length > 0) return qRes.data.data.questions[0].title;
-        }
-
+        if (r.data?.length > 0) return r.data[0].question;
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
-
-    } catch (e) {
-        return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
-    }
+    } catch (e) { return `Unknown Asset`; }
 }
 
 // --- ENDPOINTS ---
@@ -70,25 +64,15 @@ app.get('/', (req, res) => res.send('PolyLoans Relayer Active'));
 
 app.get('/market-info', async (req, res) => {
     const title = await fetchMarketTitle(req.query.tokenId);
-    res.json({ title: title, slug: "" });
+    res.json({ title, slug: "" });
 });
-
-async function resolveProxy(user) {
-    if(!user) return null;
-    const u = user.toLowerCase();
-    if(PROXY_MAP[u]) return PROXY_MAP[u];
-    try {
-        const res = await axios.get(`https://data-api.polymarket.com/positions?user=${user}`);
-        if(res.data?.[0]?.proxyWallet) return res.data[0].proxyWallet;
-    } catch(e) {}
-    return null;
-}
 
 app.get('/get-nonce', async (req, res) => {
     const { user } = req.query;
     try {
         const proxy = await resolveProxy(user);
         if(!proxy) return res.status(404).json({ error: "No Proxy Found" });
+        
         const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
         const nonce = await client.readContract({ address: proxy, abi: SAFE_ABI, functionName: 'nonce' });
         res.json({ nonce: nonce.toString(), proxy });
@@ -103,35 +87,16 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/prepare-tx', async (req, res) => {
-    const { userAddress, funcName, args } = req.body;
-    try {
-        const proxy = await resolveProxy(userAddress);
-        if(!proxy) return res.status(404).json({ error: "No Proxy Found" });
-        const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
-        const nonce = await client.readContract({ address: proxy, abi: SAFE_ABI, functionName: 'nonce' });
-        
-        const MARKET_ABI_LOCAL = parseAbi([
-            "function createRequest(uint256, uint256, uint256, uint256) external returns (uint256)", 
-            "function acceptOffer(uint256) external", 
-            "function repayLoan(uint256) external",
-            "function liquidateByTime(uint256) external",
-            "function cancelOffer(uint256) external",
-            "function cancelRequest(uint256) external"
-        ]);
-
-        const data = encodeFunctionData({ abi: MARKET_ABI_LOCAL, functionName: funcName, args: args.map(a => BigInt(a)) });
-        const message = { to: MARKET_ADDR, value: "0", data: data, operation: 0, safeTxGas: "0", baseGas: "0", gasPrice: "0", gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: nonce.toString() };
-        res.json({ proxy, message, domain: { verifyingContract: proxy, chainId: 137 } });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
+// 🔥 UPDATED PORTFOLIO SCANNER 🔥
 app.get('/portfolio', async (req, res) => {
     const { user } = req.query;
     if(!user) return res.json([]);
+
     const proxy = await resolveProxy(user);
     const targets = new Set([user.toLowerCase()]);
     if(proxy) targets.add(proxy.toLowerCase());
+
+    console.log(`🔎 Scanning Targets: ${Array.from(targets).join(', ')}`);
 
     let allPos = [];
     for(const t of targets) {
@@ -140,6 +105,8 @@ app.get('/portfolio', async (req, res) => {
             if(Array.isArray(r.data)) allPos.push(...r.data);
         } catch(e) {}
     }
+
+    // Filter tiny dust & Fetch Live Prices
     const valid = allPos.filter(p => Number(p.size) > 0.000001);
     const rich = await Promise.all(valid.map(async (p) => {
         try {
@@ -148,12 +115,12 @@ app.get('/portfolio', async (req, res) => {
             return { ...p, livePrice: prRes.data.price, slug: p.slug };
         } catch(e) { return { ...p, livePrice: "0.50", slug: "unknown" }; }
     }));
+    
     res.json(rich);
 });
 
 async function sendSafeTx(safeAddr, to, data, userSignature) {
     const account = privateKeyToAccount(PRIVATE_KEY);
-    const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
     const wallet = createWalletClient({ account, chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
 
     return await wallet.writeContract({
