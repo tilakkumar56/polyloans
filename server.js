@@ -20,23 +20,51 @@ const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 
-// --- 🔥 FORCE PROXY DISCOVERY 🔥 ---
+// --- 🕵️‍♂️ HELPER: FIND PROXY ---
 async function resolveProxy(user) {
     if(!user) return null;
-    const u = user.toLowerCase();
     try {
-        // Method 1: Gamma API (The only reliable way for new users)
-        const r = await axios.get(`https://gamma-api.polymarket.com/users/${u}`);
-        if (r.data && r.data.proxyWallet) {
-            console.log(`✅ Found Proxy: ${r.data.proxyWallet}`);
-            return r.data.proxyWallet.toLowerCase();
-        }
-    } catch(e) { console.log("Proxy lookup failed"); }
-    return null;
+        const r = await axios.get(`https://gamma-api.polymarket.com/users/${user.toLowerCase()}`);
+        return r.data?.proxyWallet?.toLowerCase() || null;
+    } catch(e) { return null; }
+}
+
+// --- 🕵️‍♂️ HELPER: SCAN VIA THE GRAPH (FINDS EVERYTHING) ---
+async function scanTheGraph(user) {
+    try {
+        // Query Polymarket's Subgraph for ANY holdings (Proxy OR EOA)
+        const query = `
+        {
+            userPositions(where: { user: "${user.toLowerCase()}", balance_gt: "0" }) {
+                balance
+                token {
+                    tokenId
+                }
+                market {
+                    question
+                    slug
+                }
+            }
+        }`;
+        
+        const r = await axios.post('https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-6', { query });
+        const data = r.data?.data?.userPositions || [];
+        
+        // Format to match our app's structure
+        return data.map(pos => ({
+            asset: pos.token.tokenId,
+            size: (Number(pos.balance) / 1e6).toString(), // Convert Wei to Human
+            title: pos.market?.question || "Unknown Asset",
+            slug: pos.market?.slug || ""
+        }));
+    } catch(e) { 
+        console.error("Graph Scan Error:", e.message); 
+        return []; 
+    }
 }
 
 // --- ENDPOINTS ---
-app.get('/', (req, res) => res.send('Scanner Online'));
+app.get('/', (req, res) => res.send('Universal Scanner Online'));
 
 app.get('/market-info', async (req, res) => {
     try {
@@ -70,32 +98,31 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- 🔥 SCAN EVERYTHING 🔥 ---
+// --- 🔥 UNIVERSAL PORTFOLIO SCANNER 🔥 ---
 app.get('/portfolio', async (req, res) => {
     const { user } = req.query;
     if(!user) return res.json([]);
 
     const userLower = user.toLowerCase();
-    const targets = new Set([userLower]); // Always scan Main Wallet
+    console.log(`🔎 Scanning: ${userLower}`);
+
+    // 1. Scan The Graph (Finds EOA assets & Proxy assets)
+    let positions = await scanTheGraph(userLower);
     
-    // Try to find Proxy
-    const proxy = await resolveProxy(userLower);
-    if(proxy) targets.add(proxy.toLowerCase()); // Add Proxy if found
-
-    console.log(`🔎 Scanning: ${Array.from(targets).join(', ')}`);
-
-    let allPos = [];
-    for(const t of targets) {
-        try {
-            const r = await axios.get(`https://data-api.polymarket.com/positions?user=${t}`);
-            if(Array.isArray(r.data)) allPos.push(...r.data);
-        } catch(e) {}
+    // 2. If Graph empty, try finding a Proxy and scanning that too
+    if (positions.length === 0) {
+        const proxy = await resolveProxy(userLower);
+        if (proxy) {
+            console.log(`   -> Found Proxy: ${proxy}, scanning it...`);
+            const proxyPos = await scanTheGraph(proxy);
+            positions = [...positions, ...proxyPos];
+        }
     }
 
-    // Filter Dust (< 0.01)
-    const valid = allPos.filter(p => Number(p.size) > 0.01);
-    
-    // Enrich with Prices
+    // 3. Filter Dust (< 0.01) & Enrich with Prices
+    const valid = positions.filter(p => Number(p.size) > 0.01);
+    console.log(`   -> Found ${valid.length} valid assets.`);
+
     const rich = await Promise.all(valid.map(async (p) => {
         try {
             const path = `/price?token_id=${p.asset}&side=sell`;
@@ -107,8 +134,8 @@ app.get('/portfolio', async (req, res) => {
                     'Poly-Api-Passphrase': API_PASSPHRASE 
                 } : {}
             });
-            return { ...p, livePrice: prRes.data.price, slug: p.slug };
-        } catch(e) { return { ...p, livePrice: "0.50", slug: "unknown" }; }
+            return { ...p, livePrice: prRes.data.price };
+        } catch(e) { return { ...p, livePrice: "0.50" }; }
     }));
     
     res.json(rich);
