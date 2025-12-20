@@ -84,7 +84,7 @@
     </main>
 
     <script>
-    // 🔥 FIXED: THIS NOW HAS YOUR ACTUAL ADDRESS 🔥
+    // 🔥 LATEST CONTRACT ADDRESS 🔥
     const MARKET_ADDR = "0x7a8386eED804a342fBE0231CcA7F9e8124eC786B"; 
     
     const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
@@ -212,7 +212,6 @@
         const s = document.getElementById("b_shares").value; const p = document.getElementById("b_principal").value; const d = document.getElementById("b_duration").value; 
         if(!id || !s || !p || !d) return alert("Fill all fields"); 
         const poly = new ethers.Contract(POLY_ADDR, POLY_ABI, signer);
-        // Correct check against the ACTUAL Address
         const isApproved = await poly.isApprovedForAll(window.myProxy, MARKET_ADDR);
         if(!isApproved) {
             alert("Step 1: Approve Collateral");
@@ -224,6 +223,34 @@
         }
         await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), BigInt(d) * 86400n]); 
         setTimeout(loadData, 2000); 
+    }
+
+    // 🔥 FIXED MAKE OFFER 🔥
+    async function makeOffer(id) {
+        try {
+            const r = document.getElementById("r_"+id).value;
+            if(!r) return alert("Please enter an Interest Rate (APR %)");
+            if(!signer) return alert("Wallet disconnected.");
+
+            const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+            const allowance = await u.allowance(userAddress, MARKET_ADDR);
+            
+            if (allowance < ethers.parseUnits("10000", 6)) { 
+                alert("Step 1: Approve USDC spending...");
+                const tx1 = await u.approve(MARKET_ADDR, ethers.MaxUint256);
+                await tx1.wait();
+            }
+
+            alert("Step 2: Sending Offer...");
+            const tx2 = await marketContract.makeOffer(id, BigInt(r));
+            alert("✅ Offer Sent!");
+            await tx2.wait();
+            loadData();
+
+        } catch (e) {
+            console.error("OFFER ERROR:", e);
+            alert("Transaction Failed: " + (e.reason || e.message || "Check Console"));
+        }
     }
 
     async function loadData() {
@@ -255,11 +282,10 @@
                 const IAmBorrower = isMe(req[0]);
                 const duration = Number(req[4]); 
 
-                // Get Extension State
                 let extData = null;
                 try {
                     const ext = await marketContract.extensions(i);
-                    if (ext[0]) { // active
+                    if (ext[0]) { 
                         extData = { duration: Number(ext[1]), reqTime: Number(ext[2]), isRejected: ext[3], rejTime: Number(ext[4]) };
                     }
                 } catch(e){}
@@ -283,7 +309,6 @@
                             const princ = Number(ethers.formatUnits(req[3],6));
                             const totalDue = calculateTotalDue(princ, rate, duration).toFixed(6);
                             
-                            // Borrower Auto-Extend Logic
                             let autoExtBtn = "";
                             if (extData && !extData.isRejected && (now > extData.reqTime + 86400)) {
                                 autoExtBtn = `<button onclick="handleAutoExtend(${i})" class="bg-blue-600 text-white text-[10px] px-2 py-1 rounded">Auto-Extend (24h Passed)</button>`;
@@ -321,7 +346,6 @@
                         const princ = Number(ethers.formatUnits(req[3],6));
                         const currentVal = calculateTotalDue(princ, rate, duration).toFixed(6);
                         
-                        // 🔥 EXTENSION REQUEST UI 🔥
                         let extHtml = "";
                         if (extData && !extData.isRejected) {
                             const extDays = extData.duration / 86400;
