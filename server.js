@@ -20,12 +20,17 @@ const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
 
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 
-// --- 🔥 ULTIMATE PROXY RESOLVER 🔥 ---
-async function resolveProxy(user) {
+// --- 🕵️‍♂️ PROXY RESOLVER ---
+async function resolveProxy(user, manualProxy) {
+    if (manualProxy && manualProxy.startsWith("0x") && manualProxy.length === 42) {
+        console.log(`✅ Using Manual Proxy: ${manualProxy}`);
+        return manualProxy.toLowerCase();
+    }
+
     if(!user) return null;
     const u = user.toLowerCase();
     
-    // Strategy 1: Gamma API (Polymarket Standard)
+    // Strategy 1: Gamma API
     try {
         const r = await axios.get(`https://gamma-api.polymarket.com/users/${u}`);
         if (r.data?.proxyWallet) {
@@ -34,25 +39,23 @@ async function resolveProxy(user) {
         }
     } catch(e) {}
 
-    // Strategy 2: Gnosis Safe Global Registry (The "Backdoor")
-    // This asks the Gnosis infrastructure directly for safes owned by this wallet
+    // Strategy 2: Gnosis Safe Registry (With Headers)
     try {
-        console.log(`🕵️‍♂️ Checking Gnosis Safe Registry for ${u}...`);
-        const r = await axios.get(`https://safe-transaction-polygon.safe.global/api/v1/owners/${u}/safes/`);
-        if (r.data?.safes && r.data.safes.length > 0) {
-            // Polymarket users usually have only 1 safe, take the first one
-            const safe = r.data.safes[0];
-            console.log(`✅ Proxy Found (Safe Registry): ${safe}`);
-            return safe.toLowerCase();
+        const r = await axios.get(`https://safe-transaction-polygon.safe.global/api/v1/owners/${u}/safes/`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' } // Anti-block
+        });
+        if (r.data?.safes?.length > 0) {
+            console.log(`✅ Proxy Found (Safe Registry): ${r.data.safes[0]}`);
+            return r.data.safes[0].toLowerCase();
         }
     } catch(e) { console.log("Gnosis Registry lookup failed"); }
 
-    console.log("❌ CRITICAL: No Proxy Found via any method.");
+    console.log("❌ No Proxy Found via Auto-Discovery.");
     return null;
 }
 
 // --- ENDPOINTS ---
-app.get('/', (req, res) => res.send('Gnosis Scanner Online'));
+app.get('/', (req, res) => res.send('Manual Override Scanner Online'));
 
 app.get('/market-info', async (req, res) => {
     try {
@@ -61,10 +64,11 @@ app.get('/market-info', async (req, res) => {
     } catch { res.json({ title: "Unknown Asset", slug: "" }); }
 });
 
+// 🔥 UPDATED: ACCEPTS MANUAL PROXY 🔥
 app.get('/get-nonce', async (req, res) => {
-    const { user } = req.query;
+    const { user, proxy: manualProxy } = req.query;
     try {
-        const proxy = await resolveProxy(user);
+        const proxy = await resolveProxy(user, manualProxy);
         if(!proxy) return res.status(404).json({ error: "No Proxy Found" });
         const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
         const nonce = await client.readContract({ address: proxy, abi: SAFE_ABI, functionName: 'nonce' });
@@ -86,37 +90,31 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- 🔥 UNIVERSAL SCANNER (DUAL MODE) 🔥 ---
+// 🔥 UPDATED: DUAL SCANNER WITH MANUAL OVERRIDE 🔥
 app.get('/portfolio', async (req, res) => {
-    const { user } = req.query;
+    const { user, proxy: manualProxy } = req.query;
     if(!user) return res.json([]);
 
     const userLower = user.toLowerCase();
-    const targets = new Set([userLower]); // Always scan Main Wallet
+    const targets = new Set([userLower]);
     
-    // Try to find Proxy
-    const proxy = await resolveProxy(userLower);
+    // Resolve Proxy (Auto or Manual)
+    const proxy = await resolveProxy(userLower, manualProxy);
     if(proxy) targets.add(proxy.toLowerCase());
 
     console.log(`🔎 Scanning Targets: ${Array.from(targets).join(', ')}`);
 
     let allPos = [];
-    
-    // Scan both addresses using Official Data API
     for(const t of targets) {
         try {
             const r = await axios.get(`https://data-api.polymarket.com/positions?user=${t}`);
             if(Array.isArray(r.data)) allPos.push(...r.data);
-        } catch(e) {
-            console.log(`Failed to scan ${t}: ${e.message}`);
-        }
+        } catch(e) {}
     }
 
-    // Filter Dust (< 0.01)
     const valid = allPos.filter(p => Number(p.size) > 0.01);
     console.log(`   -> Found ${valid.length} valid assets.`);
 
-    // Enrich with Prices
     const rich = await Promise.all(valid.map(async (p) => {
         try {
             const path = `/price?token_id=${p.asset}&side=sell`;
