@@ -11,7 +11,7 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // CONFIG
-const MARKET_ADDR = "0xe5D387e0135dab4D722838DA348e6f51E9C871Af"; 
+const MARKET_ADDR = "0x7a8386eED804a342fBE0231CcA7F9e8124eC786B"; 
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 const PROXY_MAP = { "0x87ecebbe008c66ee0a45b4f2051fe8e17f9afc1d": "0x06CF8B375BD12E7256F8Da3e695857226b2b36d7" };
 
