@@ -7,9 +7,9 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract PolyLoans is ReentrancyGuard {
     
-    // 🔥 CONFIGURATION 🔥
-    uint256 public constant DURATION_UNIT = 60;    // 1 Unit = 1 Minute (For testing loans)
-    uint256 public constant GRACE_PERIOD = 86400;  // 24 Hours (Real production setting)
+    // 🔥 CONFIG: 1 Unit = 1 Minute (Testing), Grace = 24 Hours (Fixed) 🔥
+    uint256 public constant DURATION_UNIT = 60; 
+    uint256 public constant GRACE_PERIOD = 86400; 
 
     struct Request {
         address borrower;
@@ -62,7 +62,6 @@ contract PolyLoans is ReentrancyGuard {
     function createRequest(uint256 _tokenId, uint256 _shares, uint256 _principal, uint256 _duration) external {
         require(_shares > 0 && _principal > 0, "Zero inputs");
         polymarket.safeTransferFrom(msg.sender, address(this), _tokenId, _shares, "");
-        // Store duration (Input * 60 seconds)
         requests[nextRequestId] = Request(msg.sender, _tokenId, _shares, _principal, _duration * DURATION_UNIT, true, false);
         nextRequestId++;
     }
@@ -104,7 +103,7 @@ contract PolyLoans is ReentrancyGuard {
         
         extensions[_id] = Extension({
             active: true,
-            duration: _newDuration * DURATION_UNIT, // Minutes -> Seconds
+            duration: _newDuration * DURATION_UNIT, 
             requestTime: block.timestamp,
             isRejected: false,
             rejectionTime: 0
@@ -145,7 +144,6 @@ contract PolyLoans is ReentrancyGuard {
         Request memory req = requests[_id];
 
         require(ext.isRejected, "Not rejected yet");
-        // Buyout valid for another 24h cycle
         require(block.timestamp < ext.rejectionTime + GRACE_PERIOD, "Buyout window expired");
 
         address oldLender = loan.lender;

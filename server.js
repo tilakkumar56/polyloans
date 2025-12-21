@@ -12,7 +12,7 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // 🔥 CONTRACT ADDRESS 🔥
-const MARKET_ADDR = "0xFcec5fBB4a709c28671DA015396654132eBf91FE"; 
+const MARKET_ADDR = "0x9Edef523B68616380d16fA1052642b469F4C5A7E"; 
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
 const API_KEY = process.env.POLY_API_KEY;
 const API_SECRET = process.env.POLY_API_SECRET;
@@ -25,9 +25,9 @@ async function fetchMarketTitle(tokenId) {
     if (!tokenId || tokenId === "0") return "INVALID ID";
     try {
         let r = await axios.get(`https://gamma-api.polymarket.com/markets?clob_token_ids=${tokenId}`);
-        if (r.data?.length > 0) return r.data[0].question;
+        if (r.data && r.data.length > 0) return r.data[0].question;
         r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
-        if (r.data?.length > 0) return r.data[0].question;
+        if (r.data && r.data.length > 0) return r.data[0].question;
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
     } catch { return `Unknown Asset`; }
 }
