@@ -11,8 +11,8 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// 🔥 CONTRACT ADDRESS (Verify this matches your deployment) 🔥
-const MARKET_ADDR = "0xc22E31721eFB50aDe758F41371d11d27B9402C7c"; 
+// 🔥 CONTRACT ADDRESS 🔥
+const MARKET_ADDR = "0xA6B188040ed4C7755A090B4546E4CD4aCD4634ec"; 
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
 const API_KEY = process.env.POLY_API_KEY;
 const API_SECRET = process.env.POLY_API_SECRET;
@@ -25,34 +25,25 @@ async function fetchMarketTitle(tokenId) {
     if (!tokenId || tokenId === "0") return "INVALID ID";
     try {
         let r = await axios.get(`https://gamma-api.polymarket.com/markets?clob_token_ids=${tokenId}`);
-        if (r.data && r.data.length > 0) return r.data[0].question;
+        if (r.data?.length > 0) return r.data[0].question;
         r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
-        if (r.data && r.data.length > 0) return r.data[0].question;
+        if (r.data?.length > 0) return r.data[0].question;
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
-    } catch (e) { return `Unknown Asset`; }
+    } catch { return `Unknown Asset`; }
 }
 
-async function resolveProxy(user, manualProxy) {
-    // 1. Trust Manual Input if valid
-    if (manualProxy && manualProxy.startsWith("0x") && manualProxy.length === 42) return manualProxy.toLowerCase();
-    
+async function resolveProxy(user, manual) {
+    if (manual && manual.length === 42) return manual.toLowerCase();
     if (!user) return null;
     const u = user.toLowerCase();
-
-    // 2. Gamma API
     try {
         const r = await axios.get(`https://gamma-api.polymarket.com/users/${u}`);
         if (r.data?.proxyWallet) return r.data.proxyWallet.toLowerCase();
     } catch(e) {}
-
-    // 3. Gnosis Safe Registry
     try {
-        const r = await axios.get(`https://safe-transaction-polygon.safe.global/api/v1/owners/${u}/safes/`, { 
-            headers: { 'User-Agent': 'Mozilla/5.0' } 
-        });
-        if (r.data?.safes && r.data.safes.length > 0) return r.data.safes[0].toLowerCase();
+        const r = await axios.get(`https://safe-transaction-polygon.safe.global/api/v1/owners/${u}/safes/`);
+        if (r.data?.safes?.length > 0) return r.data.safes[0].toLowerCase();
     } catch(e) {}
-
     return null;
 }
 
@@ -69,13 +60,10 @@ app.get('/get-nonce', async (req, res) => {
     try {
         const proxy = await resolveProxy(req.query.user, req.query.proxy);
         if (!proxy) return res.status(404).json({ error: "No Proxy Found" });
-        
         const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
         const nonce = await client.readContract({ address: proxy, abi: SAFE_ABI, functionName: 'nonce' });
         res.json({ nonce: nonce.toString(), proxy });
-    } catch (e) { 
-        res.status(500).json({ error: "Nonce Error: " + e.message }); 
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/relay-tx', async (req, res) => {
@@ -83,29 +71,21 @@ app.post('/relay-tx', async (req, res) => {
         const { proxy, to, data, signature } = req.body;
         const account = privateKeyToAccount(PRIVATE_KEY);
         const wallet = createWalletClient({ account, chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
-        
         const hash = await wallet.writeContract({
             address: proxy, abi: SAFE_ABI, functionName: 'execTransaction',
             args: [to, 0n, data, 0, 0n, 0n, 0n, "0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000", signature],
             gas: 500000n
         });
         res.json({ success: true, txHash: hash });
-    } catch (e) { 
-        console.error(e);
-        res.status(500).json({ error: e.message }); 
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/portfolio', async (req, res) => {
     const { user, proxy: manual } = req.query;
     if (!user) return res.json([]);
-    
-    // Scan BOTH User and Proxy
-    const targets = new Set([user.toLowerCase()]);
     const proxy = await resolveProxy(user, manual);
+    const targets = new Set([user.toLowerCase()]);
     if (proxy) targets.add(proxy);
-
-    console.log(`Scanning targets: ${Array.from(targets).join(', ')}`);
 
     let allPos = [];
     for (const t of targets) {
@@ -115,7 +95,6 @@ app.get('/portfolio', async (req, res) => {
         } catch(e) {}
     }
 
-    // Filter Dust and Enrich with Price
     const valid = allPos.filter(p => Number(p.size) > 0.01);
     const rich = await Promise.all(valid.map(async (p) => {
         try {
@@ -123,7 +102,6 @@ app.get('/portfolio', async (req, res) => {
             const path = `/price?token_id=${p.asset}&side=sell`;
             const sig = crypto.createHmac('sha256', API_SECRET).update(ts + "GET" + path).digest('base64');
             const headers = { 'Poly-Api-Key': API_KEY, 'Poly-Api-Signature': sig, 'Poly-Timestamp': ts, 'Poly-Api-Passphrase': API_PASSPHRASE };
-            
             const r = await axios.get(`https://clob.polymarket.com${path}`, { headers });
             return { ...p, livePrice: r.data.price };
         } catch { return { ...p, livePrice: "0.00" }; }

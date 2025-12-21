@@ -7,10 +7,9 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract PolyLoans is ReentrancyGuard {
     
-    // --- ⚙️ TESTING CONFIGURATION (1 Minute = 24 Hours) ---
-    uint256 public constant DURATION_UNIT = 60; // Inputs treated as Minutes
-    uint256 public constant GRACE_PERIOD = 60;  // 1 Minute Grace Period
-    // -----------------------------------------------------
+    // 🔥 TESTING: 1 UNIT = 1 MINUTE (60 Seconds) 🔥
+    uint256 public constant DURATION_UNIT = 60; 
+    uint256 public constant GRACE_PERIOD = 60; 
 
     struct Request {
         address borrower;
@@ -63,6 +62,7 @@ contract PolyLoans is ReentrancyGuard {
     function createRequest(uint256 _tokenId, uint256 _shares, uint256 _principal, uint256 _duration) external {
         require(_shares > 0 && _principal > 0, "Zero inputs");
         polymarket.safeTransferFrom(msg.sender, address(this), _tokenId, _shares, "");
+        // Store duration in SECONDS (Input * 60)
         requests[nextRequestId] = Request(msg.sender, _tokenId, _shares, _principal, _duration * DURATION_UNIT, true, false);
         nextRequestId++;
     }
@@ -76,7 +76,6 @@ contract PolyLoans is ReentrancyGuard {
     function cancelOffer(uint256 _offerId) external {
         Offer storage off = offers[_offerId];
         require(msg.sender == off.lender, "Not lender");
-        require(off.active, "Not active");
         off.active = false;
     }
 
@@ -94,16 +93,18 @@ contract PolyLoans is ReentrancyGuard {
         delete offers[_offerId];
     }
 
-    // 🔥 NEW: ONLY ALLOW REQUEST AFTER EXPIRY 🔥
+    // 🔥 LOGIC: Can only extend AFTER expiry but BEFORE grace period ends 🔥
     function requestExtension(uint256 _id, uint256 _newDuration) external {
         Loan memory loan = loans[_id];
         require(msg.sender == requests[_id].borrower, "Not borrower");
-        require(block.timestamp >= loan.startTime + loan.duration, "Loan not expired yet");
-        require(block.timestamp <= loan.startTime + loan.duration + GRACE_PERIOD, "Grace period ended");
+        
+        uint256 end = loan.startTime + loan.duration;
+        require(block.timestamp > end, "Loan not expired yet");
+        require(block.timestamp <= end + GRACE_PERIOD, "Grace period missed");
         
         extensions[_id] = Extension({
             active: true,
-            duration: _newDuration * DURATION_UNIT,
+            duration: _newDuration * DURATION_UNIT, // Minutes -> Seconds
             requestTime: block.timestamp,
             isRejected: false,
             rejectionTime: 0
@@ -124,6 +125,7 @@ contract PolyLoans is ReentrancyGuard {
         Request memory req = requests[_id];
         Extension storage ext = extensions[_id];
 
+        // Interest = Principal * Rate * Duration / (SecondsInYear * 100)
         uint256 interest = (req.principal * loan.rate * loan.duration) / (31536000 * 100);
         require(usdc.transferFrom(_payer, _recipient, interest), "Interest transfer failed");
 
@@ -165,7 +167,7 @@ contract PolyLoans is ReentrancyGuard {
         delete extensions[_id];
     }
 
-    // 🔥 NEW: SEIZE LOGIC (Grace Period Check) 🔥
+    // 🔥 LOGIC: Seize only if Grace Period passed AND no valid extension process 🔥
     function liquidateByTime(uint256 _id) external nonReentrant {
         Request storage req = requests[_id];
         Loan memory loan = loans[_id];
@@ -176,7 +178,7 @@ contract PolyLoans is ReentrancyGuard {
         uint256 end = loan.startTime + loan.duration;
         bool canSeize = false;
 
-        // Case 1: Grace Period passed, NO extension request
+        // Case 1: Grace Period passed, NO active extension request
         if (!ext.active && block.timestamp > end + GRACE_PERIOD) {
             canSeize = true;
         }
@@ -185,7 +187,7 @@ contract PolyLoans is ReentrancyGuard {
             canSeize = true;
         }
 
-        require(canSeize, "Cannot seize yet (In Grace Period)");
+        require(canSeize, "Cannot seize yet (In Grace/Buyout Period)");
 
         polymarket.safeTransferFrom(address(this), loan.lender, req.tokenId, req.shares, "");
         req.active = false;
