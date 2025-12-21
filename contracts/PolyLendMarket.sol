@@ -7,9 +7,9 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract PolyLoans is ReentrancyGuard {
     
-    // 🔥 TESTING: 1 UNIT = 1 MINUTE (60 Seconds) 🔥
-    uint256 public constant DURATION_UNIT = 60; 
-    uint256 public constant GRACE_PERIOD = 60; 
+    // 🔥 CONFIGURATION 🔥
+    uint256 public constant DURATION_UNIT = 60;    // 1 Unit = 1 Minute (For testing loans)
+    uint256 public constant GRACE_PERIOD = 86400;  // 24 Hours (Real production setting)
 
     struct Request {
         address borrower;
@@ -62,7 +62,7 @@ contract PolyLoans is ReentrancyGuard {
     function createRequest(uint256 _tokenId, uint256 _shares, uint256 _principal, uint256 _duration) external {
         require(_shares > 0 && _principal > 0, "Zero inputs");
         polymarket.safeTransferFrom(msg.sender, address(this), _tokenId, _shares, "");
-        // Store duration in SECONDS (Input * 60)
+        // Store duration (Input * 60 seconds)
         requests[nextRequestId] = Request(msg.sender, _tokenId, _shares, _principal, _duration * DURATION_UNIT, true, false);
         nextRequestId++;
     }
@@ -93,7 +93,7 @@ contract PolyLoans is ReentrancyGuard {
         delete offers[_offerId];
     }
 
-    // 🔥 LOGIC: Can only extend AFTER expiry but BEFORE grace period ends 🔥
+    // 🔥 LOGIC: Allow extension only during 24h Grace Period 🔥
     function requestExtension(uint256 _id, uint256 _newDuration) external {
         Loan memory loan = loans[_id];
         require(msg.sender == requests[_id].borrower, "Not borrower");
@@ -116,7 +116,6 @@ contract PolyLoans is ReentrancyGuard {
         require(ext.active, "No request");
         require(msg.sender == loans[_id].lender, "Only lender can accept");
 
-        // Borrower pays accrued interest for the PAST period
         _processExtension(_id, requests[_id].borrower, loans[_id].lender);
     }
 
@@ -125,7 +124,6 @@ contract PolyLoans is ReentrancyGuard {
         Request memory req = requests[_id];
         Extension storage ext = extensions[_id];
 
-        // Interest = Principal * Rate * Duration / (SecondsInYear * 100)
         uint256 interest = (req.principal * loan.rate * loan.duration) / (31536000 * 100);
         require(usdc.transferFrom(_payer, _recipient, interest), "Interest transfer failed");
 
@@ -147,27 +145,24 @@ contract PolyLoans is ReentrancyGuard {
         Request memory req = requests[_id];
 
         require(ext.isRejected, "Not rejected yet");
-        // Buyout valid during rejection window (another Grace Period cycle)
+        // Buyout valid for another 24h cycle
         require(block.timestamp < ext.rejectionTime + GRACE_PERIOD, "Buyout window expired");
 
         address oldLender = loan.lender;
         address newLender = msg.sender;
 
-        // 1. New Lender pays Principal to Old Lender
         require(usdc.transferFrom(newLender, oldLender, req.principal), "Principal transfer failed");
         
-        // 2. Borrower pays Accrued Interest to Old Lender
         uint256 interest = (req.principal * loan.rate * loan.duration) / (31536000 * 100);
         require(usdc.transferFrom(req.borrower, oldLender, interest), "Borrower interest failed");
 
-        // 3. Loan transfers to New Lender & Extends
         loan.lender = newLender;
         loan.startTime = block.timestamp;
         loan.duration = ext.duration; 
         delete extensions[_id];
     }
 
-    // 🔥 LOGIC: Seize only if Grace Period passed AND no valid extension process 🔥
+    // 🔥 LOGIC: Seize only after 24h Grace Period 🔥
     function liquidateByTime(uint256 _id) external nonReentrant {
         Request storage req = requests[_id];
         Loan memory loan = loans[_id];
@@ -178,16 +173,14 @@ contract PolyLoans is ReentrancyGuard {
         uint256 end = loan.startTime + loan.duration;
         bool canSeize = false;
 
-        // Case 1: Grace Period passed, NO active extension request
         if (!ext.active && block.timestamp > end + GRACE_PERIOD) {
             canSeize = true;
         }
-        // Case 2: Extension was Rejected, Buyout Window passed
         else if (ext.isRejected && block.timestamp > ext.rejectionTime + GRACE_PERIOD) {
             canSeize = true;
         }
 
-        require(canSeize, "Cannot seize yet (In Grace/Buyout Period)");
+        require(canSeize, "Cannot seize yet (In Grace Period)");
 
         polymarket.safeTransferFrom(address(this), loan.lender, req.tokenId, req.shares, "");
         req.active = false;

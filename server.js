@@ -12,7 +12,7 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // 🔥 CONTRACT ADDRESS 🔥
-const MARKET_ADDR = "0xA6B188040ed4C7755A090B4546E4CD4aCD4634ec"; 
+const MARKET_ADDR = "0xFcec5fBB4a709c28671DA015396654132eBf91FE"; 
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
 const API_KEY = process.env.POLY_API_KEY;
 const API_SECRET = process.env.POLY_API_SECRET;
