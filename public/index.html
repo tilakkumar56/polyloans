@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PolyLoans | Liquidity Protocol</title>
+    <title>PolyLoans | Hostile Refinancing Protocol</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     
@@ -16,7 +16,9 @@
                         bg: '#020408', 
                         surface: '#0B0D12', 
                         border: '#1E2129',
-                        brand: '#6366F1'
+                        brand: '#6366F1',
+                        danger: '#EF4444',
+                        success: '#10B981'
                     }
                 }
             }
@@ -31,6 +33,8 @@
             transition: all 0.3s ease;
         }
         .glass-card:hover { border-color: #6366F1; transform: translateY(-2px); box-shadow: 0 10px 40px -10px rgba(99, 102, 241, 0.1); }
+        .glass-card.danger-hover:hover { border-color: #EF4444; box-shadow: 0 10px 40px -10px rgba(239, 68, 68, 0.1); }
+        
         .text-glow { text-shadow: 0 0 30px rgba(99, 102, 241, 0.3); }
         
         .grid-bg {
@@ -43,7 +47,6 @@
             font-size: 4rem; font-weight: 800; color: #1E2129; position: absolute; top: -10px; right: 20px; z-index: 0;
         }
         
-        /* New Concept Styles */
         .concept-arrow {
             position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
             z-index: 10; background: #020408; border: 1px solid #6366F1;
@@ -56,7 +59,6 @@
 
     <div class="fixed inset-0 grid-bg pointer-events-none z-0"></div>
     
-    <!-- Navbar -->
     <nav class="fixed w-full z-50 glass-header">
         <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -65,57 +67,57 @@
             </div>
             
             <div class="hidden md:flex gap-8 text-sm font-medium text-gray-400">
-                <a href="#concept" class="hover:text-white transition">The Liquidity Gap</a>
-                <a href="#workflow" class="hover:text-white transition">How it Works</a>
-                <a href="app.html" class="hover:text-white transition">Marketplace</a>
+                <a href="#concept" class="hover:text-white transition">Concept</a>
+                <a href="#buyout" class="hover:text-white transition text-indigo-400">Hostile Refinancing</a>
+                <a href="#ltv" class="hover:text-white transition">LTV Thesis</a>
+                <a href="#workflow" class="hover:text-white transition">Workflow</a>
             </div>
 
-            <a href="app" class="bg-white text-black px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-gray-200 transition">
+            <a href="app.html" class="bg-white text-black px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-gray-200 transition">
                 Launch App
             </a>
         </div>
     </nav>
 
-    <!-- Hero -->
     <main class="relative pt-40 pb-24 px-6 z-10">
         <div class="max-w-5xl mx-auto text-center">
             <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-medium mb-8">
                 <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
-                Protocol V1 Live on Polygon
+                Protocol V2 Live: Hostile Refinancing Active
             </div>
 
             <h1 class="text-6xl md:text-8xl font-bold tracking-tight mb-8 text-white text-glow leading-[1.1]">
-                Capital Efficiency for <br>
-                <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">Prediction Markets.</span>
+                Liquidity with a <br>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">Hostile Twist.</span>
             </h1>
 
             <p class="text-xl text-gray-500 mb-10 max-w-2xl mx-auto leading-relaxed">
-                Unlock liquidity from your Polymarket positions without selling.
-                Borrow USDC against your outcome shares or earn yield by funding loans.
+                Unlock liquidity from your Polymarket positions. 
+                Experience a competitive debt market where 
+                <span class="text-white">anyone can buyout your loan</span> to keep you alive.
             </p>
 
             <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                <a href="app" class="h-14 px-8 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-lg flex items-center gap-2 transition w-full sm:w-auto justify-center">
-                    Enter App
+                <a href="app.html" class="h-14 px-8 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-lg flex items-center gap-2 transition w-full sm:w-auto justify-center">
+                    Enter Marketplace
                 </a>
-                <a href="#concept" class="h-14 px-8 rounded-lg border border-gray-700 hover:border-gray-500 text-gray-300 font-medium flex items-center transition w-full sm:w-auto justify-center">
-                    Read Whitepaper
+                <a href="#buyout" class="h-14 px-8 rounded-lg border border-gray-700 hover:border-gray-500 text-gray-300 font-medium flex items-center transition w-full sm:w-auto justify-center">
+                    How Buyouts Work
                 </a>
             </div>
             
-            <!-- Stats Bar -->
             <div class="mt-20 pt-10 border-t border-gray-800 grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto">
                 <div>
-                    <div class="text-3xl font-mono text-white font-bold">$1.2M</div>
-                    <div class="text-xs text-gray-500 uppercase tracking-widest mt-1">Total Liquidity</div>
+                    <div class="text-3xl font-mono text-white font-bold">50%</div>
+                    <div class="text-xs text-gray-500 uppercase tracking-widest mt-1">Target LTV</div>
                 </div>
                 <div>
-                    <div class="text-3xl font-mono text-white font-bold">4.8%</div>
-                    <div class="text-xs text-gray-500 uppercase tracking-widest mt-1">Supply APY</div>
+                    <div class="text-3xl font-mono text-white font-bold">24h</div>
+                    <div class="text-xs text-gray-500 uppercase tracking-widest mt-1">Buyout Window</div>
                 </div>
                 <div>
-                    <div class="text-3xl font-mono text-white font-bold">12k+</div>
-                    <div class="text-xs text-gray-500 uppercase tracking-widest mt-1">Active Loans</div>
+                    <div class="text-3xl font-mono text-white font-bold">Polygon</div>
+                    <div class="text-xs text-gray-500 uppercase tracking-widest mt-1">Network</div>
                 </div>
                 <div>
                     <div class="text-3xl font-mono text-white font-bold">&lt;1s</div>
@@ -125,25 +127,21 @@
         </div>
     </main>
 
-    <!-- 1. THE CORE CONCEPT -->
-    <section id="concept" class="py-32 px-6 border-t border-gray-900 bg-[#050608]">
+    <section id="concept" class="py-24 px-6 border-t border-gray-900 bg-[#050608]">
         <div class="max-w-6xl mx-auto">
             <h2 class="text-3xl font-bold mb-16 text-center text-white">The Liquidity Paradox</h2>
             
             <div class="relative grid md:grid-cols-2 gap-8 items-center">
                 
-                <!-- Center Connector -->
                 <div class="hidden md:flex concept-arrow">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
                 </div>
 
-                <!-- OLD WAY -->
                 <div class="glass-card p-10 rounded-2xl relative border-l-4 border-gray-700 opacity-60 hover:opacity-100 transition duration-500">
                     <h3 class="text-gray-500 uppercase text-sm font-bold tracking-widest mb-4">Traditional State</h3>
                     <div class="text-3xl font-bold text-white mb-2">Trapped Capital</div>
                     <p class="text-gray-400 leading-relaxed mb-6">
-                        You hold <strong class="text-white">$1,000</strong> in a winning position (e.g. "Bitcoin > $100k"). 
-                        The event ends in 6 months. Your capital is frozen.
+                        You hold <strong class="text-white">$1,000</strong> in a winning position. 
                         To get cash today, you must <span class="text-red-400">sell early</span> and forfeit your future profits.
                     </p>
                     <div class="flex gap-2">
@@ -152,12 +150,11 @@
                     </div>
                 </div>
                 
-                <!-- NEW WAY -->
                 <div class="glass-card p-10 rounded-2xl relative border-l-4 border-indigo-500 shadow-[0_0_50px_rgba(99,102,241,0.1)]">
                     <h3 class="text-indigo-400 uppercase text-sm font-bold tracking-widest mb-4">PolyLoans State</h3>
                     <div class="text-3xl font-bold text-white mb-2">Liquid Leverage</div>
                     <p class="text-gray-400 leading-relaxed mb-6">
-                        Deposit your position into the PolyLoans Vault. Borrow <strong class="text-white">$500 USDC</strong> against it immediately.
+                        Deposit shares. Borrow <strong class="text-white">$500 USDC</strong> immediately.
                         You keep the exposure. You keep the upside. You get the cash.
                     </p>
                     <div class="flex gap-2">
@@ -169,50 +166,151 @@
         </div>
     </section>
 
-    <!-- 2. USER WORKFLOW -->
+    <section id="buyout" class="py-24 px-6 bg-[#020408] relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-full bg-indigo-900/5 pointer-events-none"></div>
+        <div class="max-w-6xl mx-auto relative z-10">
+            <div class="text-center mb-16">
+                <span class="text-indigo-500 font-mono text-sm tracking-wider uppercase">The Killer Feature</span>
+                <h2 class="text-4xl font-bold text-white mt-2">Hostile Refinancing <span class="text-gray-500 text-2xl font-normal">(Buyouts)</span></h2>
+                <p class="text-gray-400 mt-4 max-w-2xl mx-auto">
+                    Most protocols are "take it or leave it." PolyLoans creates a 
+                    <span class="text-white font-bold">competitive market for debt.</span>
+                    If one lender rejects you, another can steal the deal.
+                </p>
+            </div>
+
+            
+
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="glass-card danger-hover p-8 rounded-xl border-t-4 border-gray-700">
+                    <div class="text-gray-500 font-mono mb-2">01. The Conflict</div>
+                    <h3 class="text-xl font-bold text-white mb-4">Extension Rejected</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">
+                        You can't pay your loan on time. You ask for 30 more days.
+                        The original lender is impatient and clicks <span class="text-red-400 font-bold">Reject</span>.
+                        <br><br>
+                        <em>Normally, this means immediate liquidation.</em>
+                    </p>
+                </div>
+
+                <div class="glass-card p-8 rounded-xl border-t-4 border-indigo-500 bg-indigo-900/10">
+                    <div class="text-indigo-400 font-mono mb-2">02. The Buyout Window</div>
+                    <h3 class="text-xl font-bold text-white mb-4">Market Opens</h3>
+                    <p class="text-gray-300 text-sm leading-relaxed">
+                        Instead of dying, the loan enters a <strong>Grace Period</strong>.
+                        It is now flagged as "Distressed" on the marketplace.
+                        <br><br>
+                        <em>Any third-party lender can now intervene.</em>
+                    </p>
+                </div>
+
+                <div class="glass-card p-8 rounded-xl border-t-4 border-green-500">
+                    <div class="text-green-500 font-mono mb-2">03. The Steal</div>
+                    <h3 class="text-xl font-bold text-white mb-4">Hostile Takeover</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">
+                        A "Shark" (Lender B) sees the opportunity. They call <code>buyoutLoan()</code>.
+                        They pay off the Old Lender instantly.
+                        <br><br>
+                        <em><strong>Result:</strong> Old Lender exits. New Lender enters. Borrower survives with extended time.</em>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="ltv" class="py-24 px-6 border-t border-gray-900 bg-[#050608]">
+        <div class="max-w-5xl mx-auto flex flex-col md:flex-row items-center gap-12">
+            <div class="md:w-1/2">
+                <h2 class="text-3xl font-bold text-white mb-6">The 50% LTV Thesis</h2>
+                <div class="space-y-6">
+                    <p class="text-gray-400 text-lg">
+                        Prediction markets are volatile. To protect solvency, we encourage a <strong class="text-white">50% Loan-to-Value ratio</strong>.
+                    </p>
+                    <ul class="space-y-4">
+                        <li class="flex gap-4">
+                            <div class="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center text-xl shrink-0">🛡️</div>
+                            <div>
+                                <h4 class="text-white font-bold">Safety Buffer</h4>
+                                <p class="text-sm text-gray-500">A 50% buffer ensures the lender is safe even if the share price drops significantly.</p>
+                            </div>
+                        </li>
+                        <li class="flex gap-4">
+                            <div class="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center text-xl shrink-0">💰</div>
+                            <div>
+                                <h4 class="text-white font-bold">The Incentive</h4>
+                                <p class="text-sm text-gray-500">If a borrower defaults, the lender seizes 100% of the collateral. Effectively buying the asset at a 50% discount.</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="md:w-1/2 w-full">
+                <div class="glass-card p-8 rounded-2xl bg-gradient-to-br from-[#0B0D12] to-[#1E2129] relative overflow-hidden">
+                    <div class="flex justify-between text-xs font-mono uppercase text-gray-500 mb-2">
+                        <span>Loan Value</span>
+                        <span>Collateral Value</span>
+                    </div>
+                    <div class="w-full bg-gray-700 h-4 rounded-full overflow-hidden mb-8">
+                        <div class="w-1/2 h-full bg-green-500"></div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4 text-center">
+                        <div class="p-4 bg-black/30 rounded-lg">
+                            <div class="text-green-400 font-bold text-2xl">$500</div>
+                            <div class="text-xs text-gray-500">USDC Borrowed</div>
+                        </div>
+                        <div class="p-4 bg-black/30 rounded-lg border border-indigo-500/30">
+                            <div class="text-white font-bold text-2xl">$1,000</div>
+                            <div class="text-xs text-gray-500">Share Value</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <section id="workflow" class="py-24 px-6 max-w-7xl mx-auto">
+        <div class="text-center mb-16">
+            <h2 class="text-3xl font-bold text-white">How it Works</h2>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             
-            <!-- Step 1 -->
             <div class="glass-card p-6 rounded-2xl relative h-full group">
                 <span class="step-number group-hover:text-indigo-500/10 transition">01</span>
                 <div class="relative z-10 pt-4">
                     <h3 class="text-lg font-bold text-white mb-3">Request</h3>
                     <p class="text-sm text-gray-400 leading-relaxed">
-                        Connect your wallet to auto-scan your Polymarket portfolio. Select a position and request a loan (e.g. "Pledge 1k shares for $500").
+                        Connect wallet. Scan Polymarket portfolio. Select shares and request a loan (e.g. "Pledge 1k shares for $500").
                     </p>
                 </div>
             </div>
 
-            <!-- Step 2 -->
             <div class="glass-card p-6 rounded-2xl relative h-full group">
                 <span class="step-number group-hover:text-indigo-500/10 transition">02</span>
                 <div class="relative z-10 pt-4">
                     <h3 class="text-lg font-bold text-white mb-3">Negotiate</h3>
                     <p class="text-sm text-gray-400 leading-relaxed">
-                        Lenders browse the feed. They can fund your request instantly or propose a counter-offer (e.g. "15% APR"). You click "Accept".
+                        Lenders fund your request instantly or propose a counter-offer. 
                     </p>
                 </div>
             </div>
 
-            <!-- Step 3 -->
             <div class="glass-card p-6 rounded-2xl relative h-full group">
                 <span class="step-number group-hover:text-indigo-500/10 transition">03</span>
                 <div class="relative z-10 pt-4">
                     <h3 class="text-lg font-bold text-white mb-3">Escrow</h3>
                     <p class="text-sm text-gray-400 leading-relaxed">
-                        The Smart Contract atomically swaps assets. Your shares are locked in the Vault. You receive USDC in your wallet instantly.
+                        Smart Contract swaps assets. Shares locked in Vault. USDC sent to your wallet instantly.
                     </p>
                 </div>
             </div>
 
-            <!-- Step 4 -->
             <div class="glass-card p-6 rounded-2xl relative h-full group">
                 <span class="step-number group-hover:text-indigo-500/10 transition">04</span>
                 <div class="relative z-10 pt-4">
-                    <h3 class="text-lg font-bold text-white mb-3">Resolve</h3>
+                    <h3 class="text-lg font-bold text-white mb-3">Refinance / Resolve</h3>
                     <p class="text-sm text-gray-400 leading-relaxed">
-                        Repay the principal + interest to unlock your shares. If the loan expires, the lender can click "Seize" to claim the collateral.
+                        Repay to unlock. If stuck, request extension. If rejected, wait for a <strong>Hostile Buyout</strong> or face liquidation.
                     </p>
                 </div>
             </div>
@@ -220,20 +318,21 @@
         </div>
     </section>
 
-    <!-- Footer -->
     <footer class="border-t border-gray-800 bg-[#020408] py-12">
         <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
             <div class="flex items-center gap-2">
                 <div class="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center text-xs text-white">▲</div>
                 <span class="font-bold text-gray-300">PolyLoans</span>
             </div>
+            
+            <div class="text-xs font-mono text-gray-600 bg-gray-900 px-4 py-2 rounded border border-gray-800">
+                Contract: 0xDDd7902d60B26190c909276Dac6391D991E0B8E5
+            </div>
+
             <div class="flex gap-8 text-sm text-gray-500">
                 <a href="#" class="hover:text-white transition">Terms</a>
-                <a href="#" class="hover:text-white transition">Privacy</a>
-                <a href="#" class="hover:text-white transition">Smart Contract</a>
-            </div>
-            <div class="text-sm text-gray-600">
-                &copy; 2025 PolyLoans Protocol.
+                <a href="#" class="hover:text-white transition">GitHub</a>
+                <a href="https://polygonscan.com/address/0xDDd7902d60B26190c909276Dac6391D991E0B8E5" target="_blank" class="hover:text-white transition">PolygonScan</a>
             </div>
         </div>
     </footer>
