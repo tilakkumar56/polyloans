@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const crypto = require('crypto');
-const { createPublicClient, createWalletClient, http, parseAbi, toHex } = require('viem');
+// 🔥 ENSURE getAddress IS IMPORTED 🔥
+const { createPublicClient, createWalletClient, http, parseAbi, toHex, getAddress } = require('viem');
 const { privateKeyToAccount } = require('viem/accounts');
 const { polygon } = require('viem/chains');
 require('dotenv').config();
@@ -11,7 +12,7 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// 🔥 CONTRACT ADDRESS 🔥
+// 🔥 PASTE NEW CONTRACT ADDRESS HERE AFTER DEPLOYMENT 🔥
 const MARKET_ADDR = "0x9Edef523B68616380d16fA1052642b469F4C5A7E"; 
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
 const API_KEY = process.env.POLY_API_KEY;
@@ -28,7 +29,7 @@ async function fetchMarketTitle(tokenId) {
         if (r.data && r.data.length > 0) return r.data[0].question;
         r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
         if (r.data && r.data.length > 0) return r.data[0].question;
-        return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
+        return `Asset (ID: ${tokenId.slice(0,6)}...)`;
     } catch { return `Unknown Asset`; }
 }
 
@@ -42,9 +43,10 @@ async function resolveProxy(user) {
         if (r.data?.proxyWallet) return r.data.proxyWallet.toLowerCase();
     } catch(e) {}
 
-    // 2. Try New Gnosis API (Polygon)
+    // 2. Try New Gnosis API (With Checksum)
     try {
-        const r = await axios.get(`https://api.safe.global/tx-service/pol/api/v1/owners/${u}/safes/`);
+        const checksumAddr = getAddress(u);
+        const r = await axios.get(`https://api.safe.global/tx-service/pol/api/v1/owners/${checksumAddr}/safes/`);
         if (r.data?.safes && r.data.safes.length > 0) return r.data.safes[0].toLowerCase();
     } catch(e) {}
     
@@ -87,7 +89,7 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 🔥 FIXED PORTFOLIO SCANNER (With Headers) 🔥
+// 🔥 ROBUST PORTFOLIO SCANNER 🔥
 app.get('/portfolio', async (req, res) => {
     const { user } = req.query;
     if (!user) return res.json([]);
@@ -102,23 +104,21 @@ app.get('/portfolio', async (req, res) => {
     console.log(`🔎 Scanning Targets: ${Array.from(targets).join(', ')}`);
 
     let allPos = [];
-    
-    // Headers to mimic a real browser (Bypasses API blocks)
     const headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'Accept': 'application/json'
     };
 
     for (const t of targets) {
         try {
-            // Method 1: Data API with Explicit Zero Threshold
+            // Method 1: Data API
             const url = `https://data-api.polymarket.com/positions?user=${t}&sizeThreshold=0&limit=50`;
             const r = await axios.get(url, { headers });
             if (Array.isArray(r.data)) allPos.push(...r.data);
         } catch(e) { console.log(`Data API failed for ${t}`); }
 
         try {
-            // Method 2: Gamma API (Backup)
+            // Method 2: Gamma API
             const url2 = `https://gamma-api.polymarket.com/positions?user=${t}`;
             const r2 = await axios.get(url2, { headers });
             if (Array.isArray(r2.data)) allPos.push(...r2.data);
@@ -132,24 +132,16 @@ app.get('/portfolio', async (req, res) => {
         return acc;
     }, []);
 
-    console.log(`✅ Found ${uniquePos.length} unique assets`);
-
     const rich = await Promise.all(uniquePos.map(async (p) => {
-        if(Number(p.size) < 0.000001) return null; // Filter actual zero
+        if(Number(p.size) < 0.000001) return null; 
         try {
             const ts = Math.floor(Date.now() / 1000).toString();
             const path = `/price?token_id=${p.asset}&side=sell`;
             const sig = crypto.createHmac('sha256', API_SECRET).update(ts + "GET" + path).digest('base64');
-            const authHeaders = { 
-                'Poly-Api-Key': API_KEY, 
-                'Poly-Api-Signature': sig, 
-                'Poly-Timestamp': ts, 
-                'Poly-Api-Passphrase': API_PASSPHRASE 
-            };
-            
+            const authHeaders = { 'Poly-Api-Key': API_KEY, 'Poly-Api-Signature': sig, 'Poly-Timestamp': ts, 'Poly-Api-Passphrase': API_PASSPHRASE };
             const r = await axios.get(`https://clob.polymarket.com${path}`, { headers: authHeaders });
-            return { ...p, livePrice: r.data.price, slug: p.slug };
-        } catch { return { ...p, livePrice: "0.50", slug: "unknown" }; } 
+            return { ...p, livePrice: r.data.price };
+        } catch { return { ...p, livePrice: "0.50" }; } 
     }));
 
     res.json(rich.filter(p => p !== null));
