@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const crypto = require('crypto');
-const { createPublicClient, createWalletClient, http, parseAbi, encodeFunctionData, toHex } = require('viem');
+const { createPublicClient, createWalletClient, http, parseAbi, toHex } = require('viem');
 const { privateKeyToAccount } = require('viem/accounts');
 const { polygon } = require('viem/chains');
 require('dotenv').config();
@@ -29,7 +29,7 @@ async function fetchMarketTitle(tokenId) {
         r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
         if (r.data && r.data.length > 0) return r.data[0].question;
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
-    } catch { return `Unknown Asset`; }
+    } catch (e) { return `Unknown Asset`; }
 }
 
 async function resolveProxy(user, manual) {
@@ -37,10 +37,12 @@ async function resolveProxy(user, manual) {
     if (!user) return null;
     const u = user.toLowerCase();
     try {
+        // Try Gamma User Endpoint
         const r = await axios.get(`https://gamma-api.polymarket.com/users/${u}`);
         if (r.data?.proxyWallet) return r.data.proxyWallet.toLowerCase();
     } catch(e) {}
     try {
+        // Try Gnosis API
         const r = await axios.get(`https://safe-transaction-polygon.safe.global/api/v1/owners/${u}/safes/`);
         if (r.data?.safes?.length > 0) return r.data.safes[0].toLowerCase();
     } catch(e) {}
@@ -60,6 +62,7 @@ app.get('/get-nonce', async (req, res) => {
     try {
         const proxy = await resolveProxy(req.query.user, req.query.proxy);
         if (!proxy) return res.status(404).json({ error: "No Proxy Found" });
+        
         const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
         const nonce = await client.readContract({ address: proxy, abi: SAFE_ABI, functionName: 'nonce' });
         res.json({ nonce: nonce.toString(), proxy });
@@ -80,32 +83,51 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// 🔥 UPDATED PORTFOLIO SCANNER (Uses Gamma API) 🔥
 app.get('/portfolio', async (req, res) => {
     const { user, proxy: manual } = req.query;
     if (!user) return res.json([]);
-    const proxy = await resolveProxy(user, manual);
+    
     const targets = new Set([user.toLowerCase()]);
+    const proxy = await resolveProxy(user, manual);
     if (proxy) targets.add(proxy);
+
+    console.log(`🔎 Scanning Portfolio for: ${Array.from(targets).join(', ')}`);
 
     let allPos = [];
     for (const t of targets) {
         try {
-            const r = await axios.get(`https://data-api.polymarket.com/positions?user=${t}`);
-            if (Array.isArray(r.data)) allPos.push(...r.data);
-        } catch(e) {}
+            // 🔥 CHANGED: Using Gamma API instead of Data API
+            const r = await axios.get(`https://gamma-api.polymarket.com/positions?user=${t}`);
+            // Gamma returns array directly
+            if (Array.isArray(r.data)) {
+                allPos.push(...r.data);
+            }
+        } catch(e) {
+            console.error(`Error scanning ${t}:`, e.message);
+        }
     }
 
+    console.log(`✅ Found ${allPos.length} raw positions`);
+
+    // Filter Dust and Enrich with Price
     const valid = allPos.filter(p => Number(p.size) > 0.01);
+    
     const rich = await Promise.all(valid.map(async (p) => {
         try {
             const ts = Math.floor(Date.now() / 1000).toString();
             const path = `/price?token_id=${p.asset}&side=sell`;
             const sig = crypto.createHmac('sha256', API_SECRET).update(ts + "GET" + path).digest('base64');
             const headers = { 'Poly-Api-Key': API_KEY, 'Poly-Api-Signature': sig, 'Poly-Timestamp': ts, 'Poly-Api-Passphrase': API_PASSPHRASE };
+            
             const r = await axios.get(`https://clob.polymarket.com${path}`, { headers });
             return { ...p, livePrice: r.data.price };
-        } catch { return { ...p, livePrice: "0.00" }; }
+        } catch (e) { 
+            // Fallback price if API key fails or rate limit
+            return { ...p, livePrice: "0.50" }; 
+        }
     }));
+
     res.json(rich);
 });
 
