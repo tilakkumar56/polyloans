@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const crypto = require('crypto');
-const { createPublicClient, createWalletClient, http, parseAbi, toHex } = require('viem');
+// 🔥 ADDED getAddress HERE 🔥
+const { createPublicClient, createWalletClient, http, parseAbi, toHex, getAddress } = require('viem');
 const { privateKeyToAccount } = require('viem/accounts');
 const { polygon } = require('viem/chains');
 require('dotenv').config();
@@ -11,7 +12,6 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// 🔥 NEW CONTRACT ADDRESS 🔥
 const MARKET_ADDR = "0x9Edef523B68616380d16fA1052642b469F4C5A7E"; 
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
 const API_KEY = process.env.POLY_API_KEY;
@@ -33,14 +33,21 @@ async function fetchMarketTitle(tokenId) {
 async function resolveProxy(user) {
     if (!user) return null;
     const u = user.toLowerCase();
+    
+    // 1. Try Gamma (Lowercase OK)
     try {
         const r = await axios.get(`https://gamma-api.polymarket.com/users/${u}`);
         if (r.data?.proxyWallet) return r.data.proxyWallet.toLowerCase();
     } catch(e) {}
+
+    // 2. Try Gnosis (MUST BE CHECKSUMMED!)
     try {
-        const r = await axios.get(`https://api.safe.global/tx-service/pol/api/v1/owners/${u}/safes/`);
+        const checksumAddr = getAddress(u); // 🔥 FIX: Convert to Checksum
+        const r = await axios.get(`https://api.safe.global/tx-service/pol/api/v1/owners/${checksumAddr}/safes/`);
         if (r.data?.safes?.length > 0) return r.data.safes[0].toLowerCase();
-    } catch(e) {}
+    } catch(e) {
+        console.log("Gnosis Scan Error:", e.message);
+    }
     return null;
 }
 
@@ -79,7 +86,6 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 🔥 SIMPLE SCANNER (Delegates logic to Browser if this fails) 🔥
 app.get('/portfolio', async (req, res) => {
     const { user } = req.query;
     if (!user) return res.json([]);
@@ -91,21 +97,25 @@ app.get('/portfolio', async (req, res) => {
     console.log(`Scanning: ${targets.join(', ')}`);
     
     let allPos = [];
-    // Fake Browser User-Agent to bypass some blocks
     const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' };
 
     for (const t of targets) {
         try {
-            // Force sizeThreshold=0 to see EVERYTHING
             const url = `https://data-api.polymarket.com/positions?user=${t}&sizeThreshold=0`;
             const r = await axios.get(url, { headers });
             if (Array.isArray(r.data)) allPos.push(...r.data);
-        } catch(e) { console.error(`Failed scan for ${t}: ${e.message}`); }
+        } catch(e) {}
     }
 
-    // Filter true zero & Enrich Price
     const valid = allPos.filter(p => Number(p.size) > 0);
-    const rich = await Promise.all(valid.map(async (p) => {
+    // Deduplicate
+    const unique = valid.reduce((acc, current) => {
+        const x = acc.find(item => item.asset === current.asset);
+        if (!x) return acc.concat([current]);
+        return acc;
+    }, []);
+
+    const rich = await Promise.all(unique.map(async (p) => {
         try {
             const r = await axios.get(`https://clob.polymarket.com/price?token_id=${p.asset}&side=sell`);
             return { ...p, livePrice: r.data.price };
