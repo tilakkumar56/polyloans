@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PolyLoans | DeFi Terminal</title>
+    <title>PolyLoans | Debugger</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,22 +14,18 @@
         body{background:#020408;color:#E2E8F0}
         .hidden-tab{display:none!important}
         .btn-primary{background:#6366F1;color:white;transition:0.2s}.btn-primary:hover{background:#4F46E5}
-        .btn-primary:disabled{opacity:0.5;cursor:not-allowed}
-        .tab-btn { height: 100%; border-bottom: 2px solid transparent; color: #6B7280; padding: 0 10px; transition: all 0.2s; }
         .tab-active { border-bottom: 2px solid #6366F1; color: white; font-weight: bold; }
-        .blink { animation: blinker 1s linear infinite; }
-        @keyframes blinker { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
 
     <nav class="h-20 border-b border-[#1E2129] flex items-center justify-between px-8 bg-[#020408]/90 backdrop-blur fixed w-full z-50">
         <div class="flex items-center gap-8">
-            <span class="font-bold text-lg text-white"><span class="text-brand">▲</span> PolyLoans <span class="text-[10px] text-green-500 bg-green-900/20 px-2 py-1 rounded border border-green-900">DEBUG MODE</span></span>
+            <span class="font-bold text-lg text-white"><span class="text-brand">▲</span> PolyLoans <span class="text-[10px] text-red-500 bg-red-900/20 px-2 py-1 rounded border border-red-900">DEBUG MODE</span></span>
             <div id="navTabs" class="hidden flex gap-6 text-sm font-medium h-20 items-end pb-0">
-                <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active">Overview</button>
-                <button onclick="switchTab('borrow')" id="tab-borrow" class="tab-btn">Borrow</button>
-                <button onclick="switchTab('lend')" id="tab-lend" class="tab-btn">Lend</button>
+                <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active h-full px-4 border-b-2 border-transparent">Overview</button>
+                <button onclick="switchTab('borrow')" id="tab-borrow" class="tab-btn h-full px-4 border-b-2 border-transparent">Borrow</button>
+                <button onclick="switchTab('lend')" id="tab-lend" class="tab-btn h-full px-4 border-b-2 border-transparent">Lend</button>
             </div>
         </div>
         <div class="flex items-center gap-4">
@@ -41,13 +37,25 @@
 
     <main class="pt-28 p-8 max-w-7xl mx-auto w-full space-y-8 mb-20">
         
-        <div class="bg-gray-900 p-4 rounded border border-gray-800 text-[10px] font-mono text-gray-400 mb-6">
-            <div class="font-bold text-white mb-2">🔍 DEBUG INFO</div>
-            <div>Wallet: <span id="dbgWallet" class="text-blue-400">Not Connected</span></div>
-            <div>Proxy (Auto): <span id="dbgProxy" class="text-green-400">Scanning...</span></div>
-            <div>Proxy (Manual): <span id="dbgManual" class="text-yellow-400">None</span></div>
-            <div>Total Requests: <span id="dbgReqs">0</span></div>
-            <div>My Active Loans: <span id="dbgMyLoans">0</span></div>
+        <div id="errorBox" class="hidden bg-red-900/20 border border-red-500 p-4 rounded mb-6">
+            <h3 class="text-red-500 font-bold mb-2">❌ LAST TRANSACTION ERROR</h3>
+            <textarea id="errorText" class="w-full h-32 bg-black text-red-400 font-mono text-xs p-2 rounded border border-red-800 outline-none" readonly></textarea>
+            <button onclick="document.getElementById('errorBox').classList.add('hidden')" class="mt-2 text-xs text-white underline">Close</button>
+        </div>
+
+        <div class="bg-gray-900 p-4 rounded border border-gray-800 text-[10px] font-mono text-gray-400 mb-6 grid grid-cols-2 gap-4">
+            <div>
+                <div class="font-bold text-white mb-2">🔍 IDENTITY</div>
+                <div>Wallet: <span id="dbgWallet" class="text-blue-400">Not Connected</span></div>
+                <div>Proxy: <span id="dbgProxy" class="text-green-400">None</span></div>
+                <div>Manual: <span id="dbgManual" class="text-yellow-400">None</span></div>
+            </div>
+            <div>
+                <div class="font-bold text-white mb-2">💰 ALLOWANCE CHECK</div>
+                <div>Contract: <span class="text-gray-500">0x9Edef...5A7E</span></div>
+                <div>USDC Allowance: <span id="dbgAllowance" class="text-white">--</span></div>
+                <div>USDC Balance: <span id="dbgBalance" class="text-white">--</span></div>
+            </div>
         </div>
 
         <div id="view-overview" class="block space-y-6">
@@ -62,7 +70,7 @@
             <div class="lg:col-span-4 bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white">New Request</h2>
                 <div>
-                    <div class="flex justify-between mb-1"><label class="text-xs font-bold text-gray-500">Asset (Must be ≥ $0.90)</label><label class="text-[10px] text-brand cursor-pointer"><input type="checkbox" onchange="toggleManualInput(this)"> Manual</label></div>
+                    <div class="flex justify-between mb-1"><label class="text-xs font-bold text-gray-500">Asset</label><label class="text-[10px] text-brand cursor-pointer"><input type="checkbox" onchange="toggleManualInput(this)"> Manual</label></div>
                     <select id="positionSelect" onchange="autoFillForm()" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white outline-none"><option value="">Scanning...</option></select>
                     <input type="text" id="manualTokenId" placeholder="Paste Token ID" class="hidden w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white outline-none" oninput="document.getElementById('b_tokenId').value=this.value">
                     <div id="balanceDisplay" class="text-xs text-brand mt-1 h-4 font-mono"></div>
@@ -76,7 +84,6 @@
                 
                 <div id="ltvWarning" class="text-xs h-4 text-right font-mono"></div>
                 <button onclick="handleCreateRequest()" id="btnCreate" disabled class="w-full btn-primary py-3 rounded font-bold text-sm">Sign & Post</button>
-                <div id="b_status" class="text-center text-[10px] text-gray-500 font-mono mt-1"></div>
             </div>
             <div class="lg:col-span-8 space-y-6">
                 <div class="bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6"><h3 class="font-bold text-white mb-4">My Requests & Active Debts</h3><div id="borrowerLoans" class="space-y-4 text-sm text-gray-500">No active debts.</div></div>
@@ -106,12 +113,16 @@
     window.manualProxy = localStorage.getItem("manualProxy") || "";
     const INFO_CACHE = {}; 
     
-    // ABIs
     const MARKET_ABI = ["function createRequest(uint256,uint256,uint256,uint256) external returns (uint256)", "function makeOffer(uint256,uint256) external returns (uint256)", "function acceptOffer(uint256) external", "function repayLoan(uint256) external", "function liquidateByTime(uint256) external", "function cancelRequest(uint256) external", "function requestExtension(uint256, uint256) external", "function acceptExtension(uint256) external", "function rejectExtension(uint256) external", "function buyoutLoan(uint256) external", "function cancelOffer(uint256) external", "function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)", "function loans(uint256) view returns (address, uint256, uint256, uint256)", "function offers(uint256) view returns (uint256, address, uint256, bool)", "function extensions(uint256) view returns (bool, uint256, uint256, bool, uint256)", "function nextRequestId() view returns (uint256)", "function nextOfferId() view returns (uint256)"];
     const USDC_ABI = ["function approve(address, uint256) external", "function allowance(address, address) view returns (uint256)", "function balanceOf(address) view returns (uint256)"];
     const POLY_ABI = ["function setApprovalForAll(address, bool) external", "function isApprovedForAll(address, address) view returns (bool)"];
 
     function log(msg) { document.getElementById("consoleLog").innerText = `> ${msg}`; console.log(msg); }
+    function showError(msg) { 
+        document.getElementById("errorBox").classList.remove("hidden");
+        document.getElementById("errorText").value = msg;
+        window.scrollTo(0,0);
+    }
 
     if (window.ethereum) { window.ethereum.on('accountsChanged', () => window.location.reload()); window.ethereum.on('chainChanged', () => window.location.reload()); }
 
@@ -132,7 +143,7 @@
             document.getElementById("navTabs").classList.remove("hidden");
             document.getElementById("dbgWallet").innerText = userAddress;
             
-            // Restore manual proxy if saved
+            // Restore manual proxy
             if(window.manualProxy) {
                 document.getElementById("manualProxyInput").value = window.manualProxy;
                 setManualProxy(window.manualProxy);
@@ -140,79 +151,124 @@
 
             switchTab('borrow'); 
             await initProxy();
+            await checkAllowance();
             scanPortfolio(); 
             loadData(); 
             setInterval(loadData, 4000); 
-        } catch(e) { console.error(e); }
+        } catch(e) { showError(e.message); }
     }
 
-    // 🔥 SYNC MANUAL PROXY 🔥
+    async function checkAllowance() {
+        try {
+            const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+            const allowance = await usdc.allowance(userAddress, MARKET_ADDR);
+            const bal = await usdc.balanceOf(userAddress);
+            document.getElementById("dbgAllowance").innerText = ethers.formatUnits(allowance, 6);
+            document.getElementById("dbgBalance").innerText = ethers.formatUnits(bal, 6);
+        } catch(e) { document.getElementById("dbgAllowance").innerText = "Error"; }
+    }
+
+    // --- REPAY FUNCTION WITH FULL DEBUG ---
+    async function handleRepay(id, principal, rate, duration) {
+        try {
+            const total = calculateTotalDue(principal, rate, duration);
+            const safeWei = ethers.parseUnits((total * 1.05).toFixed(6), 6); // +5% Buffer
+            
+            log(`Checking Repay for #${id}...`);
+            
+            const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+            
+            // 1. Check if USER has enough USDC
+            const bal = await usdc.balanceOf(userAddress);
+            if (bal < safeWei) throw new Error(`Insufficient USDC! You have $${ethers.formatUnits(bal,6)}, need ~$${total.toFixed(2)}`);
+
+            // 2. Check if Contract is Approved
+            const allowance = await usdc.allowance(userAddress, MARKET_ADDR);
+            log(`Allowance: ${ethers.formatUnits(allowance, 6)}`);
+
+            if (allowance < safeWei) {
+                if(!confirm("Step 1: Approve USDC spending?")) return;
+                const tx = await usdc.approve(MARKET_ADDR, ethers.MaxUint256);
+                log("Approving...");
+                await tx.wait();
+                log("Approved! Click Repay again.");
+                await checkAllowance();
+                return;
+            }
+            
+            if(!confirm(`Step 2: Pay $${total.toFixed(6)} now?`)) return;
+            log("Sending Repayment...");
+            
+            // 3. Send Transaction
+            const tx = await marketContract.repayLoan(id);
+            log(`Tx Sent: ${tx.hash}`);
+            await tx.wait();
+            
+            alert("✅ Loan Repaid!");
+            loadData();
+            await checkAllowance();
+
+        } catch(e) {
+            console.error(e);
+            let msg = e.message;
+            if(e.data) msg += "\nData: " + e.data;
+            if(e.reason) msg += "\nReason: " + e.reason;
+            showError(msg);
+        }
+    }
+
+    // --- OTHER CORE FUNCTIONS ---
     function setManualProxy(val) {
         if(!val || val.length < 40) return;
         window.manualProxy = val.toLowerCase();
-        localStorage.setItem("manualProxy", window.manualProxy); // PERSIST
+        localStorage.setItem("manualProxy", window.manualProxy);
         document.getElementById("dbgManual").innerText = val.slice(0,6)+"...";
-        log(`Manual Proxy Set: ${val}`);
+        log(`Manual Proxy Set`);
         scanPortfolio();
         loadData(); 
     }
 
     async function initProxy() {
-        log("Finding Proxy...");
         try {
             let r = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`);
             let d = await r.json();
             if(d.proxy) { setProxy(d.proxy); return; }
         } catch(e) {}
-
         try {
             const checksumAddr = ethers.getAddress(userAddress); 
             const safeRes = await fetch(`https://api.safe.global/tx-service/pol/api/v1/owners/${checksumAddr}/safes/`);
             const safeData = await safeRes.json();
-            if (safeData.safes && safeData.safes.length > 0) {
-                setProxy(safeData.safes[0]);
-            } else {
-                 log("No Auto-Proxy found.");
-                 document.getElementById("dbgProxy").innerText = "None (Use Manual)";
-            }
-        } catch(e) { log("Proxy Scan Failed: " + e.message); }
+            if (safeData.safes && safeData.safes.length > 0) setProxy(safeData.safes[0]);
+        } catch(e) {}
     }
 
     function setProxy(addr) {
         window.myProxy = addr.toLowerCase();
         document.getElementById("dbgProxy").innerText = window.myProxy.slice(0,6)+"...";
-        log(`Auto Proxy Found: ${window.myProxy}`);
         scanPortfolio(); 
         loadData(); 
     }
 
-    // 🔥 IMPROVED OWNERSHIP CHECK 🔥
     function isMe(addr) { 
         if (!addr) return false; 
         const target = addr.toLowerCase(); 
         const me = userAddress.toLowerCase();
         const p = window.myProxy ? window.myProxy.toLowerCase() : "";
         const m = window.manualProxy ? window.manualProxy.toLowerCase() : "";
-        
-        // Debug Matching logic
-        // console.log(`Checking ${target} against: Me(${me}), Proxy(${p}), Manual(${m})`);
-        
         return (target === me) || (p && target === p) || (m && target === m); 
     }
 
+    // --- SCANNER & ACTIONS (Standard) ---
     async function scanPortfolio() { 
         const select = document.getElementById("positionSelect");
         select.innerHTML = '<option>Scanning...</option>';
-        
         let data = [];
         try {
             let url = `${RENDER_API_URL}/portfolio?user=${userAddress}`;
             if(window.manualProxy) url += `&proxy=${window.manualProxy}`;
-            else if(window.myProxy) url += `&proxy=${window.myProxy}`;
-            
             const res = await fetch(url);
             data = await res.json();
-        } catch(e) { console.log("Server scan error"); }
+        } catch(e) {}
 
         if ((!data || data.length === 0) && (window.myProxy || window.manualProxy)) {
             const t = window.manualProxy || window.myProxy;
@@ -222,12 +278,7 @@
                 if(Array.isArray(d)) data = d.map(p => ({...p, livePrice: "0.50"}));
             } catch(e) {}
         }
-
-        if (!data || data.length === 0) { 
-            select.innerHTML = '<option value="">No assets found (Try Manual)</option>'; 
-            return; 
-        }
-        
+        if (!data || data.length === 0) { select.innerHTML = '<option value="">No assets found</option>'; return; }
         select.innerHTML = '<option value="">-- Select Asset --</option>'; 
         data.forEach(p => { 
             const opt = document.createElement("option"); 
@@ -237,19 +288,53 @@
             opt.text = `${p.title || p.asset.slice(0,6)} (${Number(p.size).toFixed(2)})`; 
             select.appendChild(opt); 
         }); 
-        log(`Assets Loaded: ${data.length}`);
     }
 
-    // --- DATA LOADING LOOP ---
+    async function signAndRelayGeneric(toAddr, data) { try { let url = `${RENDER_API_URL}/get-nonce?user=${userAddress}`; if(window.manualProxy) url += `&proxy=${window.manualProxy}`; const nonceRes = await fetch(url); const meta = await nonceRes.json(); const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] }; const message = { to: toAddr, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce }; const payload = JSON.stringify({ types: { EIP712Domain: [{name:"chainId",type:"uint256"}, {name:"verifyingContract",type:"address"}], SafeTx: types.SafeTx }, primaryType: "SafeTx", domain: { verifyingContract: meta.proxy, chainId: 137 }, message }); const sig = await ethProvider.request({ method: "eth_signTypedData_v4", params: [userAddress, payload] }); const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: toAddr, data, signature: sig }) }); const json = await res.json(); if(!json.success) throw new Error(json.error); return json.txHash; } catch(e) { showError("Relay Error: "+e.message); return null; } }
+    async function signAndRelay(func, args) { const iface = new ethers.Interface(MARKET_ABI); const data = iface.encodeFunctionData(func, args); return await signAndRelayGeneric(MARKET_ADDR, data); }
+    async function getInfo(id) { if(INFO_CACHE[id]) return INFO_CACHE[id]; try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const d = await res.json(); INFO_CACHE[id]=d; return d; } catch{ return {title:"Unknown", slug:""}; } }
+    
+    async function handleCreateRequest() { if(!window.manualProxy && !window.myProxy) return alert("Waiting for proxy..."); let id = document.getElementById("manualTokenId").value || document.getElementById("positionSelect").value; const s = document.getElementById("b_shares").value; const p = document.getElementById("b_principal").value; const d = document.getElementById("b_duration").value; if(!id || !s || !p || !d) return alert("Fill all fields"); try { const poly = new ethers.Contract(POLY_ADDR, POLY_ABI, signer); const isApproved = await poly.isApprovedForAll(window.myProxy || window.manualProxy, MARKET_ADDR); if(!isApproved) { await signAndRelayGeneric(POLY_ADDR, (new ethers.Interface(POLY_ABI)).encodeFunctionData("setApprovalForAll", [MARKET_ADDR, true])); alert("Approved! Click Sign again."); return; } await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), BigInt(d)*60n]); setTimeout(loadData, 2000); } catch(e) { showError(e.message); } }
+    // ... [Helpers] ...
+    function switchTab(t) { ['overview','borrow','lend'].forEach(v => { document.getElementById(`view-${v}`).classList.add('hidden-tab'); document.getElementById(`tab-${v}`).classList.remove('tab-active'); }); document.getElementById(`view-${t}`).classList.remove('hidden-tab'); document.getElementById(`tab-${t}`).classList.add('tab-active'); }
+    function calculateFixedInterest(p, r, d) { return (p * r * d) / (31536000 * 100); }
+    function calculateTotalDue(p, r, d) { return p + calculateFixedInterest(p, r, d); }
+    function parseLoanStruct(a) { return { lender: a[0], start: Number(a[1]), rate: Number(a[2]), duration: Number(a[3]) }; }
+    function updateProfitPreview(id, p, d) { const r = document.getElementById("r_"+id).value; if(r) document.getElementById("profit_"+id).innerText = `Return: +$${calculateFixedInterest(p,r,d*60).toFixed(6)}`; }
+    function checkLTV() { const s = Number(document.getElementById("b_shares").value); const p = Number(document.getElementById("b_principal").value); const btn = document.getElementById("btnCreate"); const warn = document.getElementById("ltvWarning"); let price = 0.50; if(document.getElementById("positionSelect").selectedOptions.length > 0) price = Number(document.getElementById("positionSelect").selectedOptions[0].getAttribute("data-price")) || 0.50; if (price < 0.90) { warn.innerHTML = `<span class="text-danger font-bold">⚠️ Asset Price ($${price.toFixed(2)}) below $0.90 minimum!</span>`; btn.disabled = true; return; } const maxLoan = s * price * 0.50; if (p > maxLoan) { warn.innerHTML = `<span class="text-danger">Max Loan: $${maxLoan.toFixed(2)} (50% LTV)</span>`; btn.disabled = true; } else { warn.innerHTML = `<span class="text-success">LTV OK (Max: $${maxLoan.toFixed(2)})</span>`; btn.disabled = false; } }
+    function autoFillForm() { const sel = document.getElementById("positionSelect"); if(sel.value) { document.getElementById("b_tokenId").value = sel.value; document.getElementById("balanceDisplay").innerText = `Bal: ${sel.selectedOptions[0].getAttribute("data-bal")}`; } }
+    function toggleManualInput(cb) { document.getElementById("positionSelect").style.display = cb.checked ? "none" : "block"; document.getElementById("manualTokenId").style.display = cb.checked ? "block" : "none"; document.getElementById("b_tokenId").value = ""; }
+    
+    // ... [Other Lender/Borrower Actions (Same as before)] ...
+    async function handleAcceptOffer(id) { if(confirm("Accept?")) await signAndRelay("acceptOffer", [id]); loadData(); }
+    async function handleCancelRequest(id) { if(confirm("Cancel?")) await signAndRelay("cancelRequest", [id]); loadData(); }
+    async function makeOffer(id, p) { const r = document.getElementById("r_"+id).value; const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer); if((await u.allowance(userAddress, MARKET_ADDR)) < ethers.parseUnits(p.toString(),6)) await(await u.approve(MARKET_ADDR, ethers.MaxUint256)).wait(); await(await marketContract.makeOffer(id, BigInt(r))).wait(); loadData(); }
+    async function handleSeize(id) { if(confirm("Seize?")) await(await marketContract.liquidateByTime(id)).wait(); loadData(); }
+    async function handleAcceptExt(id) { if(confirm("Accept Ext?")) await(await marketContract.acceptExtension(id)).wait(); loadData(); }
+    async function handleRejectExt(id) { if(confirm("Reject?")) await(await marketContract.rejectExtension(id)).wait(); loadData(); }
+    async function handleBuyout(id, p) { if(confirm("Buyout?")) { const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer); if((await u.allowance(userAddress, MARKET_ADDR)) < ethers.parseUnits(p.toString(),6)) await(await u.approve(MARKET_ADDR, ethers.MaxUint256)).wait(); await(await marketContract.buyoutLoan(id)).wait(); loadData(); } }
+    async function handleExtend(id) { const d=prompt("Mins:"); if(d) await signAndRelay("requestExtension", [id, BigInt(d)*60n]); }
+    async function handleAutoExtend(id) { if(!confirm("Auto-Extend?")) return; await signAndRelay("acceptExtension", [id]); alert("Auto-Extended!"); loadData(); }
+    async function handleCancelOffer(id) { if(!confirm("Cancel Offer?")) return; try { const tx = await marketContract.cancelOffer(id); await tx.wait(); loadData(); } catch(e) { showError(e.message); } }
+
     async function loadData() {
         if(!marketContract) return;
-        let nextId;
-        try { nextId = await marketContract.nextRequestId(); } catch(e) { return; }
-        
-        document.getElementById("dbgReqs").innerText = (Number(nextId)-1).toString();
+        let nextId, nextOff;
+        try { nextId = await marketContract.nextRequestId(); nextOff = await marketContract.nextOfferId(); } catch(e) { return; }
 
-        let bLoans="", feed="";
-        let myLoanCount = 0;
+        let feed="", bOffers="", bLoans="", lLoans="", bHist=""; 
+        let requestOffersMap = {}; 
+
+        for(let i=1; i<Number(nextOff); i++) {
+            try {
+                const off = await marketContract.offers(i); 
+                if(off[3]) {
+                    const reqKey = off[0].toString();
+                    if(!requestOffersMap[reqKey]) requestOffersMap[reqKey] = [];
+                    requestOffersMap[reqKey].push({id: i, lender: off[1], rate: Number(off[2])});
+                }
+            } catch(e){}
+        }
 
         for(let i=Number(nextId)-1; i>=1; i--) {
             try {
@@ -257,58 +342,42 @@
                 if (req[1].toString() === "0") continue;
                 
                 const IAmBorrower = isMe(req[0]);
-                if(IAmBorrower) myLoanCount++;
-
                 const info = await getInfo(req[1]);
                 const side = info.slug && info.slug.includes("no") ? "(NO)" : "(YES)"; 
                 const princ = Number(ethers.formatUnits(req[3],6));
-                
-                // --- BORROWER ---
+                const duration = Number(req[4]); 
+
+                let extData = null; try { const ext = await marketContract.extensions(i); if (ext[0]) extData = { duration: Number(ext[1]), reqTime: Number(ext[2]), isRejected: ext[3], rejTime: Number(ext[4]) }; } catch(e){}
+
                 if (IAmBorrower) { 
                     if (req[5]) { 
                         if (!req[6]) { // PENDING
-                            bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608] mb-2"><div>Pending #${i}: ${info.title}</div><button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs">Cancel</button></div>`;
+                            bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608] mb-2"><div class="flex justify-between items-start mb-2"><div><div class="font-bold text-white text-sm"><span class="text-xs text-gray-500 mr-2">#${i}</span><a href="#" class="hover:text-brand hover:underline">${info.title}</a> <span class="text-success font-bold">${side}</span></div><div class="text-xs text-orange-400">Waiting for Lender...</div></div><button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded">Cancel</button></div></div>`;
+                            (requestOffersMap[i.toString()]||[]).forEach(o => { 
+                                bOffers += `<div class="p-3 border border-green-900 rounded bg-[#051005] flex justify-between items-center mb-1"><div><div class="text-xs text-gray-400">Lender: ${o.lender.slice(0,6)}...</div><div class="text-sm font-bold text-green-400">${o.rate}% APR</div></div><button onclick="handleAcceptOffer(${o.id})" class="bg-green-600 px-3 py-1 rounded text-xs text-white">Accept</button></div>`; 
+                            });
                         } else { // ACTIVE LOAN
                             const loan = await marketContract.loans(i);
                             const rate = Number(loan[2]);
-                            const duration = Number(req[4]); 
                             const due = calculateTotalDue(princ, rate, duration).toFixed(6);
-                            bLoans += `<div class="p-4 border border-green-900 rounded bg-[#050608] mb-2"><div>Active #${i}: ${info.title}</div><div class="text-xs text-gray-400">Owe: $${due}</div><button onclick="handleRepay(${i}, ${princ}, ${rate}, ${duration})" class="bg-brand text-black text-xs px-2 py-1 rounded">Repay</button></div>`;
+                            let extBtn = "";
+                            const now = Math.floor(Date.now()/1000);
+                            const end = Number(loan[1]) + duration;
+                            if (now > end && now < end + 86400 && !extData) extBtn = `<button onclick="handleExtend(${i})" class="bg-blue-600 animate-pulse text-white text-[10px] px-2 py-1 rounded">Request Ext</button>`;
+                            
+                            bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] mb-2"><div class="flex justify-between items-center"><div><div class="font-bold text-white text-sm">#${i} ${info.title} <span class="text-success">${side}</span></div><div class="text-xs text-gray-400">Owe: $${due}</div></div><div class="flex flex-col gap-2 items-end"><button onclick="handleRepay(${i}, ${princ}, ${rate}, ${duration})" class="bg-brand text-black text-xs px-4 py-1 rounded font-bold">Repay</button>${extBtn}</div></div></div>`;
                         }
                     }
                 }
-                // --- LENDER ---
-                else if (req[5] && !req[6]) {
-                     feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] mb-2"><div>Request #${i}: ${info.title}</div><div class="text-xs text-gray-500">Ask: $${princ}</div><button onclick="makeOffer(${i}, ${princ})" class="bg-brand px-2 py-1 rounded text-xs text-black">Offer</button></div>`;
+                
+                if (!IAmBorrower && req[5] && !req[6]) {
+                    feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] mb-2"><div class="mb-2"><div class="font-bold text-white text-sm">#${i} ${info.title} <span class="text-success">${side}</span></div><div class="flex gap-4 text-xs text-gray-500 mt-1"><span>Ask: $${princ}</span><span>Dur: ${duration/60} Mins</span></div></div><div class="flex flex-col gap-1"><div class="flex gap-2"><input id="r_${i}" placeholder="APR %" class="w-16 bg-black text-white text-center text-xs rounded border border-gray-700"><button onclick="makeOffer(${i}, ${princ})" class="bg-brand px-4 py-1 rounded text-xs text-white font-bold text-black">Offer</button></div></div></div>`;
                 }
-
             } catch(e){ console.error(e) }
         }
-        
         document.getElementById("borrowerLoans").innerHTML = bLoans || '<div class="text-center text-xs text-gray-500">No active debts.</div>';
         document.getElementById("marketFeed").innerHTML = feed || '<div class="text-center text-xs text-gray-500">No requests.</div>';
-        document.getElementById("dbgMyLoans").innerText = myLoanCount.toString();
     }
-
-    // --- HELPERS ---
-    function switchTab(t) { ['overview','borrow','lend'].forEach(v => { document.getElementById(`view-${v}`).classList.add('hidden-tab'); document.getElementById(`tab-${v}`).classList.remove('tab-active'); }); document.getElementById(`view-${t}`).classList.remove('hidden-tab'); document.getElementById(`tab-${t}`).classList.add('tab-active'); }
-    function calculateFixedInterest(p, r, d) { return (p * r * d) / (31536000 * 100); }
-    function calculateTotalDue(p, r, d) { return p + calculateFixedInterest(p, r, d); }
-    function checkLTV() { /* Standard LTV Check */ }
-    function autoFillForm() { const sel = document.getElementById("positionSelect"); if(sel.value) { document.getElementById("b_tokenId").value = sel.value; document.getElementById("balanceDisplay").innerText = `Bal: ${sel.selectedOptions[0].getAttribute("data-bal")}`; } }
-    function toggleManualInput(cb) { document.getElementById("positionSelect").style.display = cb.checked ? "none" : "block"; document.getElementById("manualTokenId").style.display = cb.checked ? "block" : "none"; document.getElementById("b_tokenId").value = ""; }
-    
-    // --- ACTIONS ---
-    async function signAndRelayGeneric(toAddr, data) { try { let url = `${RENDER_API_URL}/get-nonce?user=${userAddress}`; if(window.manualProxy) url += `&proxy=${window.manualProxy}`; const nonceRes = await fetch(url); const meta = await nonceRes.json(); const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] }; const message = { to: toAddr, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce }; const payload = JSON.stringify({ types: { EIP712Domain: [{name:"chainId",type:"uint256"}, {name:"verifyingContract",type:"address"}], SafeTx: types.SafeTx }, primaryType: "SafeTx", domain: { verifyingContract: meta.proxy, chainId: 137 }, message }); const sig = await ethProvider.request({ method: "eth_signTypedData_v4", params: [userAddress, payload] }); const res = await fetch(`${RENDER_API_URL}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: toAddr, data, signature: sig }) }); const json = await res.json(); if(!json.success) throw new Error(json.error); return json.txHash; } catch(e) { alert("Error: " + e.message); return null; } }
-    async function signAndRelay(func, args) { const iface = new ethers.Interface(MARKET_ABI); const data = iface.encodeFunctionData(func, args); return await signAndRelayGeneric(MARKET_ADDR, data); }
-    async function getInfo(id) { if(INFO_CACHE[id]) return INFO_CACHE[id]; try { const res = await fetch(`${RENDER_API_URL}/market-info?tokenId=${id}`); const d = await res.json(); INFO_CACHE[id]=d; return d; } catch{ return {title:"Unknown", slug:""}; } }
-    
-    async function handleRepay(id, p, r, d) { if(!confirm("Repay?")) return; const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer); const allowance = await u.allowance(userAddress, MARKET_ADDR); if(allowance < ethers.MaxUint256/2n) { await u.approve(MARKET_ADDR, ethers.MaxUint256); alert("Approved!"); return; } try { const tx = await marketContract.repayLoan(id); await tx.wait(); alert("Repaid!"); loadData(); } catch(e){ alert(e.message); } }
-    async function handleCreateRequest() { if(!window.myProxy) return alert("Enter Proxy!"); let id = document.getElementById("manualTokenId").value || document.getElementById("positionSelect").value; const s = document.getElementById("b_shares").value; const p = document.getElementById("b_principal").value; const d = document.getElementById("b_duration").value; if(!id || !s || !p || !d) return alert("Fill all fields"); alert("Signing..."); try { const poly = new ethers.Contract(POLY_ADDR, POLY_ABI, signer); const isApproved = await poly.isApprovedForAll(window.myProxy, MARKET_ADDR); if(!isApproved) { await signAndRelayGeneric(POLY_ADDR, (new ethers.Interface(POLY_ABI)).encodeFunctionData("setApprovalForAll", [MARKET_ADDR, true])); alert("Approved! Click Sign again."); return; } await signAndRelay('createRequest', [id, BigInt(Math.floor(s*1e6)), BigInt(Math.floor(p*1e6)), BigInt(d)*60n]); setTimeout(loadData, 2000); } catch(e) { alert(e.message); } }
-    // ... [Other Lender functions omitted for brevity but should be included from previous] ...
-    async function handleCancelRequest(id) { if(confirm("Cancel?")) await signAndRelay("cancelRequest", [id]); loadData(); }
-    async function handleAcceptOffer(id) { if(confirm("Accept?")) await signAndRelay("acceptOffer", [id]); loadData(); }
-    async function makeOffer(id, p) { const r = prompt("Rate %:"); if(r) { const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer); if((await u.allowance(userAddress, MARKET_ADDR)) < ethers.parseUnits(p.toString(),6)) await(await u.approve(MARKET_ADDR, ethers.MaxUint256)).wait(); await(await marketContract.makeOffer(id, BigInt(r))).wait(); loadData(); } }
     </script>
 </body>
 </html>
