@@ -36,13 +36,13 @@ async function resolveProxy(user) {
     if (!user) return null;
     const u = user.toLowerCase();
     
-    // 1. Try Gamma User Profile (Most reliable for Polymarket)
+    // 1. Try Gamma (Fastest)
     try {
         const r = await axios.get(`https://gamma-api.polymarket.com/users/${u}`);
         if (r.data?.proxyWallet) return r.data.proxyWallet.toLowerCase();
     } catch(e) {}
 
-    // 2. Try NEW Gnosis Safe API (Polygon)
+    // 2. Try New Gnosis API (Polygon)
     try {
         const r = await axios.get(`https://api.safe.global/tx-service/pol/api/v1/owners/${u}/safes/`);
         if (r.data?.safes && r.data.safes.length > 0) return r.data.safes[0].toLowerCase();
@@ -87,12 +87,12 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 🔥 SUPER ROBUST SCANNER 🔥
+// 🔥 FIXED PORTFOLIO SCANNER (With Headers) 🔥
 app.get('/portfolio', async (req, res) => {
     const { user } = req.query;
     if (!user) return res.json([]);
     
-    // Scan User AND Proxy
+    // Scan both EOA and Proxy
     const targets = new Set();
     targets.add(user.toLowerCase());
     
@@ -102,21 +102,30 @@ app.get('/portfolio', async (req, res) => {
     console.log(`🔎 Scanning Targets: ${Array.from(targets).join(', ')}`);
 
     let allPos = [];
+    
+    // Headers to mimic a real browser (Bypasses API blocks)
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json'
+    };
+
     for (const t of targets) {
         try {
-            // Method A: Data API (Corrected URL)
-            const r1 = await axios.get(`https://data-api.polymarket.com/positions?user=${t}&sizeThreshold=0&limit=50`);
-            if (Array.isArray(r1.data)) allPos.push(...r1.data);
-        } catch(e) {}
+            // Method 1: Data API with Explicit Zero Threshold
+            const url = `https://data-api.polymarket.com/positions?user=${t}&sizeThreshold=0&limit=50`;
+            const r = await axios.get(url, { headers });
+            if (Array.isArray(r.data)) allPos.push(...r.data);
+        } catch(e) { console.log(`Data API failed for ${t}`); }
 
         try {
-            // Method B: Gamma API (Fallback)
-            const r2 = await axios.get(`https://gamma-api.polymarket.com/positions?user=${t}`);
+            // Method 2: Gamma API (Backup)
+            const url2 = `https://gamma-api.polymarket.com/positions?user=${t}`;
+            const r2 = await axios.get(url2, { headers });
             if (Array.isArray(r2.data)) allPos.push(...r2.data);
-        } catch(e) {}
+        } catch(e) { console.log(`Gamma API failed for ${t}`); }
     }
 
-    // Deduplicate by Asset ID
+    // Deduplicate
     const uniquePos = allPos.reduce((acc, current) => {
         const x = acc.find(item => item.asset === current.asset);
         if (!x) return acc.concat([current]);
@@ -126,14 +135,19 @@ app.get('/portfolio', async (req, res) => {
     console.log(`✅ Found ${uniquePos.length} unique assets`);
 
     const rich = await Promise.all(uniquePos.map(async (p) => {
-        if(Number(p.size) < 0.000001) return null; // Filter true zero
+        if(Number(p.size) < 0.000001) return null; // Filter actual zero
         try {
             const ts = Math.floor(Date.now() / 1000).toString();
             const path = `/price?token_id=${p.asset}&side=sell`;
             const sig = crypto.createHmac('sha256', API_SECRET).update(ts + "GET" + path).digest('base64');
-            const headers = { 'Poly-Api-Key': API_KEY, 'Poly-Api-Signature': sig, 'Poly-Timestamp': ts, 'Poly-Api-Passphrase': API_PASSPHRASE };
+            const authHeaders = { 
+                'Poly-Api-Key': API_KEY, 
+                'Poly-Api-Signature': sig, 
+                'Poly-Timestamp': ts, 
+                'Poly-Api-Passphrase': API_PASSPHRASE 
+            };
             
-            const r = await axios.get(`https://clob.polymarket.com${path}`, { headers });
+            const r = await axios.get(`https://clob.polymarket.com${path}`, { headers: authHeaders });
             return { ...p, livePrice: r.data.price };
         } catch { return { ...p, livePrice: "0.50" }; } 
     }));
