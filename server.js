@@ -11,9 +11,13 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// 🔥 CONFIG 🔥
+// 🔥 NEW CONTRACT ADDRESS 🔥
 const MARKET_ADDR = "0x9Edef523B68616380d16fA1052642b469F4C5A7E"; 
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
+const API_KEY = process.env.POLY_API_KEY;
+const API_SECRET = process.env.POLY_API_SECRET;
+const API_PASSPHRASE = process.env.POLY_API_PASSPHRASE;
+
 const SAFE_ABI = parseAbi(["function nonce() view returns (uint256)", "function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address payable refundReceiver, bytes signatures) payable returns (bool)"]);
 
 // --- HELPERS ---
@@ -75,7 +79,7 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 🔥 SIMPLE SCANNER (Browser will handle fallback) 🔥
+// 🔥 SIMPLE SCANNER (Delegates logic to Browser if this fails) 🔥
 app.get('/portfolio', async (req, res) => {
     const { user } = req.query;
     if (!user) return res.json([]);
@@ -87,19 +91,20 @@ app.get('/portfolio', async (req, res) => {
     console.log(`Scanning: ${targets.join(', ')}`);
     
     let allPos = [];
-    const headers = { 'User-Agent': 'Mozilla/5.0' }; // Fake Browser
+    // Fake Browser User-Agent to bypass some blocks
+    const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' };
 
     for (const t of targets) {
         try {
+            // Force sizeThreshold=0 to see EVERYTHING
             const url = `https://data-api.polymarket.com/positions?user=${t}&sizeThreshold=0`;
             const r = await axios.get(url, { headers });
             if (Array.isArray(r.data)) allPos.push(...r.data);
-        } catch(e) {}
+        } catch(e) { console.error(`Failed scan for ${t}: ${e.message}`); }
     }
 
-    // Filter valid
+    // Filter true zero & Enrich Price
     const valid = allPos.filter(p => Number(p.size) > 0);
-    // Enrich with Price
     const rich = await Promise.all(valid.map(async (p) => {
         try {
             const r = await axios.get(`https://clob.polymarket.com/price?token_id=${p.asset}&side=sell`);
