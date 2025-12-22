@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const crypto = require('crypto');
-const { createPublicClient, createWalletClient, http, parseAbi, toHex } = require('viem');
+const { createPublicClient, createWalletClient, http, parseAbi, encodeFunctionData, toHex } = require('viem');
 const { privateKeyToAccount } = require('viem/accounts');
 const { polygon } = require('viem/chains');
 require('dotenv').config();
@@ -29,23 +29,25 @@ async function fetchMarketTitle(tokenId) {
         r = await axios.get(`https://gamma-api.polymarket.com/markets?token_id=${tokenId}`);
         if (r.data && r.data.length > 0) return r.data[0].question;
         return `Unknown Asset (ID: ${tokenId.slice(0,6)}...)`;
-    } catch (e) { return `Unknown Asset`; }
+    } catch { return `Unknown Asset`; }
 }
 
-async function resolveProxy(user, manual) {
-    if (manual && manual.length === 42) return manual.toLowerCase();
+async function resolveProxy(user) {
     if (!user) return null;
     const u = user.toLowerCase();
+    
+    // 1. Try Gamma (Fastest)
     try {
-        // Try Gamma User Endpoint
         const r = await axios.get(`https://gamma-api.polymarket.com/users/${u}`);
         if (r.data?.proxyWallet) return r.data.proxyWallet.toLowerCase();
     } catch(e) {}
+
+    // 2. Try Gnosis (Backup)
     try {
-        // Try Gnosis API
         const r = await axios.get(`https://safe-transaction-polygon.safe.global/api/v1/owners/${u}/safes/`);
         if (r.data?.safes?.length > 0) return r.data.safes[0].toLowerCase();
     } catch(e) {}
+    
     return null;
 }
 
@@ -60,7 +62,10 @@ app.get('/market-info', async (req, res) => {
 
 app.get('/get-nonce', async (req, res) => {
     try {
-        const proxy = await resolveProxy(req.query.user, req.query.proxy);
+        // Allow manual override from query
+        let proxy = req.query.proxy;
+        if (!proxy) proxy = await resolveProxy(req.query.user);
+        
         if (!proxy) return res.status(404).json({ error: "No Proxy Found" });
         
         const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
@@ -83,37 +88,43 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 🔥 UPDATED PORTFOLIO SCANNER (Uses Gamma API) 🔥
+// 🔥 ROBUST PORTFOLIO SCANNER 🔥
 app.get('/portfolio', async (req, res) => {
-    const { user, proxy: manual } = req.query;
+    const { user } = req.query;
     if (!user) return res.json([]);
     
-    const targets = new Set([user.toLowerCase()]);
-    const proxy = await resolveProxy(user, manual);
+    // 1. Identify Targets: Scan USER + PROXY
+    const targets = new Set();
+    targets.add(user.toLowerCase());
+    
+    const proxy = await resolveProxy(user);
     if (proxy) targets.add(proxy);
 
-    console.log(`🔎 Scanning Portfolio for: ${Array.from(targets).join(', ')}`);
+    console.log(`🔎 Scanning: ${Array.from(targets).join(', ')}`);
 
     let allPos = [];
     for (const t of targets) {
         try {
-            // 🔥 CHANGED: Using Gamma API instead of Data API
-            const r = await axios.get(`https://gamma-api.polymarket.com/positions?user=${t}`);
-            // Gamma returns array directly
+            // 🔥 CRITICAL: sizeThreshold=0 ensures we see EVERYTHING
+            const url = `https://data-api.polymarket.com/positions?user=${t}&sizeThreshold=0&limit=50`;
+            const r = await axios.get(url);
             if (Array.isArray(r.data)) {
+                console.log(`✅ Found ${r.data.length} positions for ${t}`);
                 allPos.push(...r.data);
             }
         } catch(e) {
-            console.error(`Error scanning ${t}:`, e.message);
+            console.error(`❌ Scan failed for ${t}: ${e.message}`);
         }
     }
 
-    console.log(`✅ Found ${allPos.length} raw positions`);
+    // 2. Remove Duplicates & Enrich Prices
+    const uniquePos = allPos.reduce((acc, current) => {
+        const x = acc.find(item => item.asset === current.asset);
+        if (!x) return acc.concat([current]);
+        return acc;
+    }, []);
 
-    // Filter Dust and Enrich with Price
-    const valid = allPos.filter(p => Number(p.size) > 0.01);
-    
-    const rich = await Promise.all(valid.map(async (p) => {
+    const rich = await Promise.all(uniquePos.map(async (p) => {
         try {
             const ts = Math.floor(Date.now() / 1000).toString();
             const path = `/price?token_id=${p.asset}&side=sell`;
@@ -122,10 +133,7 @@ app.get('/portfolio', async (req, res) => {
             
             const r = await axios.get(`https://clob.polymarket.com${path}`, { headers });
             return { ...p, livePrice: r.data.price };
-        } catch (e) { 
-            // Fallback price if API key fails or rate limit
-            return { ...p, livePrice: "0.50" }; 
-        }
+        } catch { return { ...p, livePrice: "0.50" }; } // Fallback price
     }));
 
     res.json(rich);
