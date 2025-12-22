@@ -7,9 +7,9 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract PolyLoans is ReentrancyGuard {
     
-    // 🔥 TEST MODE: 1 UNIT = 1 MINUTE, GRACE = 2 MINUTES 🔥
-    uint256 public constant DURATION_UNIT = 60; 
-    uint256 public constant GRACE_PERIOD = 120; 
+    // 🔥 PRODUCTION MODE: 1 UNIT = 1 DAY (86400s), GRACE = 24 HOURS (86400s) 🔥
+    uint256 public constant DURATION_UNIT = 86400; 
+    uint256 public constant GRACE_PERIOD = 86400; 
 
     struct Request {
         address borrower;
@@ -62,6 +62,7 @@ contract PolyLoans is ReentrancyGuard {
     function createRequest(uint256 _tokenId, uint256 _shares, uint256 _principal, uint256 _duration) external {
         require(_shares > 0 && _principal > 0, "Zero inputs");
         polymarket.safeTransferFrom(msg.sender, address(this), _tokenId, _shares, "");
+        // Duration is stored in Seconds (Input * 86400)
         requests[nextRequestId] = Request(msg.sender, _tokenId, _shares, _principal, _duration * DURATION_UNIT, true, false);
         nextRequestId++;
     }

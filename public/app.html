@@ -14,6 +14,7 @@
         body{background:#020408;color:#E2E8F0}
         .hidden-tab{display:none!important}
         .btn-primary{background:#6366F1;color:white;transition:0.2s}.btn-primary:hover{background:#4F46E5}
+        .btn-primary:disabled{opacity:0.5;cursor:not-allowed}
         .tab-btn { height: 100%; border-bottom: 2px solid transparent; color: #6B7280; padding: 0 10px; transition: all 0.2s; }
         .tab-active { border-bottom: 2px solid #6366F1; color: white; font-weight: bold; }
         .blink { animation: blinker 1s linear infinite; }
@@ -22,9 +23,13 @@
 </head>
 <body class="min-h-screen flex flex-col">
 
-    <nav class="h-20 border-b border-[#1E2129] flex items-center justify-between px-8 bg-[#020408]/90 backdrop-blur fixed w-full z-50">
+    <div class="bg-red-600 text-white text-[10px] font-bold text-center py-1 tracking-wider uppercase w-full z-[60]">
+        ⚠️ DISCLAIMER: This project is UNAUDITED. Use only funds you can afford to lose. Use at your own risk.
+    </div>
+
+    <nav class="h-20 border-b border-[#1E2129] flex items-center justify-between px-8 bg-[#020408]/90 backdrop-blur fixed w-full z-50 top-6">
         <div class="flex items-center gap-8">
-            <span class="font-bold text-lg text-white"><span class="text-brand">▲</span> PolyLoans <span class="text-[10px] text-green-500 bg-green-900/20 px-2 py-1 rounded border border-green-900">LIVE</span></span>
+            <span class="font-bold text-lg text-white"><span class="text-brand">▲</span> PolyLoans <span class="text-[10px] text-green-500 bg-green-900/20 px-2 py-1 rounded border border-green-900">MAINNET</span></span>
             <div id="navTabs" class="hidden flex gap-6 text-sm font-medium h-20 items-end pb-0">
                 <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active">Overview</button>
                 <button onclick="switchTab('borrow')" id="tab-borrow" class="tab-btn">Borrow</button>
@@ -38,7 +43,7 @@
         </div>
     </nav>
 
-    <main class="pt-28 p-8 max-w-7xl mx-auto w-full space-y-8 mb-20">
+    <main class="pt-32 p-8 max-w-7xl mx-auto w-full space-y-8 mb-20">
         <div id="view-overview" class="block space-y-6">
             <h2 class="text-xl font-bold text-white">Dashboard</h2>
             <div class="grid grid-cols-4 gap-6">
@@ -51,7 +56,7 @@
             <div class="lg:col-span-4 bg-[#0B0D12] border border-[#1E2129] rounded-xl p-6 space-y-5 h-fit">
                 <h2 class="font-bold text-white">New Request</h2>
                 <div>
-                    <div class="flex justify-between mb-1"><label class="text-xs font-bold text-gray-500">Asset (≥ $0.90)</label></div>
+                    <div class="flex justify-between mb-1"><label class="text-xs font-bold text-gray-500">Asset (≥ $0.90)</label><label class="text-[10px] text-brand cursor-pointer"><input type="checkbox" onchange="toggleManualInput(this)"> Manual</label></div>
                     <select id="positionSelect" onchange="autoFillForm()" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white outline-none"><option value="">Scanning...</option></select>
                     <input type="text" id="manualTokenId" placeholder="Paste Token ID" class="hidden w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white outline-none" oninput="document.getElementById('b_tokenId').value=this.value">
                     <div id="balanceDisplay" class="text-xs text-brand mt-1 h-4 font-mono"></div>
@@ -61,7 +66,7 @@
                     <div><label class="text-xs text-gray-500">Shares</label><input type="number" id="b_shares" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" oninput="checkLTV()"></div>
                     <div><label class="text-xs text-gray-500">USDC</label><input type="number" id="b_principal" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" oninput="checkLTV()"></div>
                 </div>
-                <div><label class="text-xs text-gray-500 mb-2 block uppercase tracking-wider">Duration (MINUTES ⚠️)</label><input type="number" id="b_duration" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" placeholder="10"></div>
+                <div><label class="text-xs text-gray-500 mb-2 block uppercase tracking-wider">Duration (DAYS ⚠️)</label><input type="number" id="b_duration" class="w-full bg-[#050608] border border-[#1E2129] rounded px-3 py-2 text-sm text-white" placeholder="7"></div>
                 
                 <div id="ltvWarning" class="text-xs h-4 text-right font-mono"></div>
                 <button onclick="handleCreateRequest()" id="btnCreate" disabled class="w-full btn-primary py-3 rounded font-bold text-sm">Sign & Post</button>
@@ -85,7 +90,8 @@
     <div id="consoleLog" class="fixed bottom-0 left-0 w-full h-6 bg-black text-green-500 text-[10px] font-mono p-1 border-t border-gray-800 overflow-hidden whitespace-nowrap z-50">Initializing...</div>
 
     <script>
-    const MARKET_ADDR = "0x9Edef523B68616380d16fA1052642b469F4C5A7E"; 
+    // 🔥 PASTE NEW ADDRESS HERE 🔥
+    const MARKET_ADDR = "0xDDd7902d60B26190c909276Dac6391D991E0B8E5"; 
     const USDC_ADDR = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; 
     const POLY_ADDR = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"; 
     const RENDER_API_URL = "https://polyloans-api.onrender.com"; 
@@ -129,26 +135,28 @@
         } catch(e) { console.error(e); }
     }
 
-    // --- LOGIC ---
     function setManualProxy(val) { if(!val || val.length < 40) return; window.manualProxy = val.toLowerCase(); localStorage.setItem("manualProxy", window.manualProxy); scanPortfolio(); loadData(); }
     async function initProxy() { try { let r = await fetch(`${RENDER_API_URL}/get-nonce?user=${userAddress}`); let d = await r.json(); if(d.proxy) { window.myProxy = d.proxy.toLowerCase(); if(!document.getElementById("manualProxyInput").value) document.getElementById("manualProxyInput").value = window.myProxy; scanPortfolio(); loadData(); return; } } catch(e) {} }
     function isMe(addr) { if (!addr) return false; const target = addr.toLowerCase(); return (target === userAddress.toLowerCase()) || (window.myProxy && target === window.myProxy) || (window.manualProxy && target === window.manualProxy); }
+    
+    // 🔥 MATH UPDATED FOR DAYS (86400s) 🔥
     function calculateFixedInterest(p, r, d) { return (p * r * d) / (31536000 * 100); }
     function calculateTotalDue(p, r, d) { return p + calculateFixedInterest(p, r, d); }
     function parseLoanStruct(a) { return { lender: a[0], start: Number(a[1]), rate: Number(a[2]), duration: Number(a[3]) }; }
     
-    // 🔥 UPDATED PROFIT PREVIEW (FIXES LENDER UI) 🔥
     function updateProfitPreview(id, p, d) { 
         const r = document.getElementById("r_"+id).value; 
         if(r) { 
-            // Note: d is passed in minutes here because of logic below
-            const i = calculateFixedInterest(p, Number(r), d*60); // Mins -> Secs 
+            // d is already in SECONDS here, so no * 60 needed if passed correctly, wait:
+            // In render loop below: duration is req[4] (which is seconds). 
+            // BUT: durationDays = duration / 86400.
+            // Let's check logic:
+            // Input 'd' here comes from the loop: `durationDays`
+            const i = calculateFixedInterest(p, Number(r), d*86400); // Days -> Secs 
             const tot = p + i;
             document.getElementById("profit_"+id).innerText = `Est. Interest: +$${i.toFixed(4)} (Net: $${tot.toFixed(4)})`; 
             document.getElementById("profit_"+id).className = "text-emerald-400 font-mono text-[10px] mt-1";
-        } else { 
-            document.getElementById("profit_"+id).innerText = ""; 
-        } 
+        } else { document.getElementById("profit_"+id).innerText = ""; } 
     }
 
     async function loadData() {
@@ -159,7 +167,6 @@
         let feed="", bOffers="", bLoans="", lLoans="", bHist=""; 
         let requestOffersMap = {}; 
 
-        // 1. Map Offers
         for(let i=1; i<Number(nextOff); i++) {
             try {
                 const off = await marketContract.offers(i); 
@@ -171,7 +178,6 @@
             } catch(e){}
         }
 
-        // 2. Loop Requests
         for(let i=Number(nextId)-1; i>=1; i--) {
             try {
                 const req = await marketContract.requests(i); 
@@ -189,8 +195,6 @@
                     if (req[5]) { 
                         if (!req[6]) { // PENDING
                             bLoans += `<div class="p-4 border border-gray-700 rounded bg-[#050608] mb-2"><div class="flex justify-between items-start mb-2"><div><div class="font-bold text-white text-sm">#${i} ${info.title} <span class="text-success">${side}</span></div><div class="text-xs text-orange-400">Waiting for Lender...</div></div><button onclick="handleCancelRequest(${i})" class="text-red-400 text-xs border border-red-900 px-3 py-1 rounded">Cancel</button></div></div>`;
-                            
-                            // 🔥 FIXED BORROWER OFFERS DISPLAY 🔥
                             (requestOffersMap[i.toString()]||[]).forEach(o => { 
                                 const interest = calculateFixedInterest(princ, o.rate, duration);
                                 const totalRepay = princ + interest;
@@ -203,12 +207,15 @@
                             let extBtn = "";
                             const now = Math.floor(Date.now()/1000);
                             const end = Number(loan[1]) + duration;
-                            if (now > end && now < end + 120 && !extData) extBtn = `<button onclick="handleExtend(${i})" class="bg-blue-600 animate-pulse text-white text-[10px] px-2 py-1 rounded">Request Ext</button>`;
+                            if (now > end && now < end + 86400 && !extData) extBtn = `<button onclick="handleExtend(${i})" class="bg-blue-600 animate-pulse text-white text-[10px] px-2 py-1 rounded">Request Ext (24h)</button>`;
                             
                             const timeLeft = end - now;
-                            const timer = timeLeft < 0 ? "EXPIRED" : `${Math.floor(timeLeft/60)}m ${timeLeft%60}s`;
+                            const daysLeft = Math.floor(timeLeft / 86400);
+                            const hoursLeft = Math.floor((timeLeft % 86400) / 3600);
+                            const timer = timeLeft < 0 ? "EXPIRED" : `${daysLeft}d ${hoursLeft}h`;
+                            const timerClass = timeLeft < 0 ? "text-red-500 blink" : "text-green-400";
                             
-                            bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] mb-2"><div class="flex justify-between items-center"><div><div class="font-bold text-white text-sm">#${i} ${info.title} <span class="text-success">${side}</span></div><div class="text-xs font-mono mt-1 ${timeLeft < 0 ? 'text-red-500 blink' : 'text-green-400'}">Due: ${timer}</div><div class="text-xs text-gray-400">Owe: $${due}</div></div><div class="flex flex-col gap-2 items-end"><button onclick="handleRepay(${i}, ${princ}, ${rate}, ${duration})" class="bg-brand text-black text-xs px-4 py-1 rounded font-bold">Repay</button>${extBtn}</div></div></div>`;
+                            bLoans += `<div class="p-4 border border-green-900/50 rounded bg-[#050608] mb-2"><div class="flex justify-between items-center"><div><div class="font-bold text-white text-sm">#${i} ${info.title} <span class="text-success">${side}</span></div><div class="text-xs font-mono mt-1 ${timerClass}">Due: ${timer}</div><div class="text-xs text-gray-400">Owe: $${due}</div></div><div class="flex flex-col gap-2 items-end"><button onclick="handleRepay(${i}, ${princ}, ${rate}, ${duration})" class="bg-brand text-black text-xs px-4 py-1 rounded font-bold">Repay</button>${extBtn}</div></div></div>`;
                         }
                     } else if (req[6]) { // HISTORY
                         bHist += `<div class="p-3 border border-gray-800 rounded bg-[#0B0D12] flex justify-between items-center mb-1"><div class="font-bold text-white text-xs truncate w-2/3">#${i} ${info.title}</div><div class="text-[10px] text-green-500">✅ REPAID</div></div>`;
@@ -216,16 +223,15 @@
                 }
 
                 if (!IAmBorrower && req[5] && !req[6]) { // LENDER FEED
-                    const durationMins = duration / 60; 
+                    const durationDays = duration / 86400; // Display in Days
                     const myOffer = (requestOffersMap[i.toString()]||[]).find(o => isMe(o.lender));
                     const competitors = (requestOffersMap[i.toString()]||[]).filter(o => !isMe(o.lender)).map(o => o.rate + "%");
                     
-                    // 🔥 FIXED CANCEL BUTTON & COMPETITORS 🔥
                     let actionHtml = myOffer 
                         ? `<button onclick="handleCancelOffer(${myOffer.id})" class="bg-red-900 border border-red-500 text-red-200 px-4 py-1 rounded text-xs font-bold w-full">Cancel My Offer (${myOffer.rate}%)</button>`
-                        : `<div class="flex gap-2"><input id="r_${i}" placeholder="APR %" class="w-16 bg-black text-white text-center text-xs rounded border border-gray-700" oninput="updateProfitPreview(${i}, ${princ}, ${durationMins})"><button onclick="makeOffer(${i}, ${princ})" class="bg-brand px-4 py-1 rounded text-xs text-white font-bold text-black">Offer</button></div>`;
+                        : `<div class="flex gap-2"><input id="r_${i}" placeholder="APR %" class="w-16 bg-black text-white text-center text-xs rounded border border-gray-700" oninput="updateProfitPreview(${i}, ${princ}, ${durationDays})"><button onclick="makeOffer(${i}, ${princ})" class="bg-brand px-4 py-1 rounded text-xs text-white font-bold text-black">Offer</button></div>`;
 
-                    feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] mb-2"><div class="mb-2"><div class="font-bold text-white text-sm">#${i} ${info.title} <span class="text-success">${side}</span></div><div class="flex gap-4 text-xs text-gray-500 mt-1"><span>Ask: $${princ}</span><span>Dur: ${durationMins.toFixed(0)} Mins</span><span class="text-orange-400">Competitors: ${competitors.length > 0 ? competitors.join(', ') : 'None'}</span></div></div><div class="flex flex-col gap-1">${actionHtml}</div><div id="profit_${i}"></div></div>`;
+                    feed += `<div class="p-4 border border-[#1E2129] rounded bg-[#050608] mb-2"><div class="mb-2"><div class="font-bold text-white text-sm">#${i} ${info.title} <span class="text-success">${side}</span></div><div class="flex gap-4 text-xs text-gray-500 mt-1"><span>Ask: $${princ}</span><span>Dur: ${durationDays.toFixed(1)} Days</span><span class="text-orange-400">Competitors: ${competitors.length > 0 ? competitors.join(', ') : 'None'}</span></div></div><div class="flex flex-col gap-1">${actionHtml}</div><div id="profit_${i}"></div></div>`;
                 }
 
                 if (!IAmBorrower && req[6] && req[5]) { // LENDER INVESTMENTS
@@ -234,17 +240,21 @@
                     if (isMe(lender)) { 
                         const end = start + duration;
                         const now = Math.floor(Date.now()/1000);
-                        const canSeize = (!extData && now > end + 120) || (extData && extData.isRejected && now > extData.rejTime + 120); 
-                        const currentVal = calculateTotalDue(princ, rate, duration).toFixed(6);
+                        const graceEnd = end + 86400; // 24H Grace
+                        const canSeize = (!extData && now > graceEnd) || (extData && extData.isRejected && now > extData.rejTime + 86400); 
+                        const currentVal = calculateTotalDue(Number(ethers.formatUnits(req[3],6)), rate, duration).toFixed(6);
 
                         let extHtml = "";
                         if (extData && !extData.isRejected) {
                             extHtml = `<div class="mt-2 p-2 bg-blue-900/40 border border-blue-500 rounded flex justify-between items-center"><span class="text-xs text-blue-200 font-bold">📢 EXTENSION REQUESTED</span><div class="flex gap-2"><button onclick="handleAcceptExt(${i})" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] px-3 py-1 rounded font-bold">Accept</button><button onclick="handleRejectExt(${i})" class="bg-red-600 hover:bg-red-500 text-white text-[10px] px-2 py-1 rounded font-bold">Reject</button></div></div>`;
+                        } else if (extData && extData.isRejected) {
+                             const buyoutLeft = (extData.rejTime + 86400) - now;
+                             if (buyoutLeft > 0) extHtml = `<div class="mt-2 text-[10px] text-yellow-500">In Buyout Window (${Math.floor(buyoutLeft/3600)}h left)</div>`;
                         }
 
                         let actionBtn = `<span class="text-xs text-gray-600">Active</span>`;
                         if (canSeize) actionBtn = `<button onclick="handleSeize(${i})" class="bg-red-600 hover:bg-red-500 text-white text-xs px-3 py-1 rounded font-bold animate-pulse">SEIZE</button>`;
-                        else if (now > end && now < end + 120 && !extData) actionBtn = `<span class="text-[10px] text-yellow-500">In Grace Period</span>`;
+                        else if (now > end && now < graceEnd && !extData) actionBtn = `<span class="text-[10px] text-yellow-500">In Grace Period</span>`;
 
                         lLoans += `<div class="p-4 border border-emerald-900/30 rounded bg-[#050608] mb-2"><div class="font-bold text-white text-sm mb-1">#${i} ${info.title} <span class="text-success">${side}</span></div><div class="flex justify-between text-xs text-gray-400 mb-2"><span>Borrower: ${req[0].slice(0,6)}</span></div><div class="flex justify-between items-center"><div><div class="text-xs font-mono text-emerald-400">Val: $${currentVal}</div></div>${actionBtn}</div>${extHtml}</div>`;
                     }
@@ -252,8 +262,8 @@
                 
                 if (!IAmBorrower && req[6] && req[5] && extData && extData.isRejected) {
                     const now = Math.floor(Date.now()/1000);
-                    if (now < extData.rejTime + 120) { 
-                        feed += `<div class="p-4 border border-yellow-500/50 rounded bg-[#1A1500] mb-2"><div class="mb-2"><div class="font-bold text-yellow-500 text-sm">🔥 BUYOUT OPPORTUNITY #${i}</div><div class="text-white text-xs">${info.title}</div><div class="text-[10px] text-gray-400">Principal: $${princ} | Ends in: ${(extData.rejTime+120) - now}s</div></div><button onclick="handleBuyout(${i}, ${princ})" class="w-full bg-yellow-600 text-black font-bold text-xs py-2 rounded">BUY LOAN (Pay Principal)</button></div>`;
+                    if (now < extData.rejTime + 86400) { 
+                        feed += `<div class="p-4 border border-yellow-500/50 rounded bg-[#1A1500] mb-2"><div class="mb-2"><div class="font-bold text-yellow-500 text-sm">🔥 BUYOUT OPPORTUNITY #${i}</div><div class="text-white text-xs">${info.title}</div><div class="text-[10px] text-gray-400">Principal: $${princ} | Ends in: ${Math.floor((extData.rejTime+86400 - now)/3600)}h</div></div><button onclick="handleBuyout(${i}, ${princ})" class="w-full bg-yellow-600 text-black font-bold text-xs py-2 rounded">BUY LOAN (Pay Principal)</button></div>`;
                     }
                 }
             } catch(e){ console.error(e) }
@@ -265,7 +275,6 @@
         document.getElementById("borrowerHistory").innerHTML = bHist || '<div class="text-center text-xs text-gray-600">No history found.</div>';
     }
 
-    // --- ACTIONS ---
     function switchTab(t) { ['overview','borrow','lend'].forEach(v => { document.getElementById(`view-${v}`).classList.add('hidden-tab'); document.getElementById(`tab-${v}`).classList.remove('tab-active'); }); document.getElementById(`view-${t}`).classList.remove('hidden-tab'); document.getElementById(`tab-${t}`).classList.add('tab-active'); }
     function checkLTV() { const s = Number(document.getElementById("b_shares").value); const p = Number(document.getElementById("b_principal").value); const btn = document.getElementById("btnCreate"); const warn = document.getElementById("ltvWarning"); let price = 0.50; if(document.getElementById("positionSelect").selectedOptions.length > 0) price = Number(document.getElementById("positionSelect").selectedOptions[0].getAttribute("data-price")) || 0.50; if (price < 0.90) { warn.innerHTML = `<span class="text-danger font-bold">⚠️ Asset Price ($${price.toFixed(2)}) below $0.90 minimum!</span>`; btn.disabled = true; return; } const maxLoan = s * price * 0.50; if (p > maxLoan) { warn.innerHTML = `<span class="text-danger">Max Loan: $${maxLoan.toFixed(2)} (50% LTV)</span>`; btn.disabled = true; } else { warn.innerHTML = `<span class="text-success">LTV OK (Max: $${maxLoan.toFixed(2)})</span>`; btn.disabled = false; } }
     function autoFillForm() { const sel = document.getElementById("positionSelect"); if(sel.value) { document.getElementById("b_tokenId").value = sel.value; document.getElementById("balanceDisplay").innerText = `Bal: ${sel.selectedOptions[0].getAttribute("data-bal")} | Price: $${Number(opt.getAttribute("data-price")).toFixed(2)}`; } }
@@ -277,7 +286,6 @@
     async function scanPortfolio() { const select = document.getElementById("positionSelect"); try { let url = `${RENDER_API_URL}/portfolio?user=${userAddress}`; if(window.manualProxy) url += `&proxy=${window.manualProxy}`; const res = await fetch(url); const data = await res.json(); if (!data || data.length === 0) { select.innerHTML = '<option value="">No assets found</option>'; return; } select.innerHTML = '<option value="">-- Select Asset --</option>'; data.forEach(p => { const opt = document.createElement("option"); opt.value = p.asset; opt.setAttribute("data-bal", p.size); opt.setAttribute("data-price", p.livePrice); opt.text = `${p.title} (${Number(p.size).toFixed(2)})`; select.appendChild(opt); }); } catch(e) { select.innerHTML = '<option value="">Scan Failed</option>'; } }
 
     async function handleRepay(id, principal, rate, duration) { const total = calculateTotalDue(principal, rate, duration); const safeWei = ethers.parseUnits((total * 1.05).toFixed(6), 6); if(!confirm(`Repay Loan #${id}?\n\nFixed Total: $${total.toFixed(6)}`)) return; const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer); const allowance = await usdc.allowance(window.myProxy || userAddress, MARKET_ADDR); if (allowance < safeWei) { alert("Step 1: Approve USDC"); const iface = new ethers.Interface(USDC_ABI); const data = iface.encodeFunctionData("approve", [MARKET_ADDR, ethers.MaxUint256]); await signAndRelayGeneric(USDC_ADDR, data); alert("Approved! Repay again."); return; } await signAndRelay("repayLoan", [id]); alert("Repaid!"); loadData(); }
-    // 🔥 FIXED: LENDER ACTIONS ARE NOW DIRECT (NO SIGNANDRELAY) 🔥
     async function handleSeize(id) { if(!confirm("Liquidate?")) return; try { const tx = await marketContract.liquidateByTime(id); await tx.wait(); alert("Seized!"); loadData(); } catch(e){ alert(e.message); } }
     async function handleAcceptExt(id) { if(!confirm("Accept Extension?")) return; try { const tx = await marketContract.acceptExtension(id); await tx.wait(); alert("Extended!"); loadData(); } catch(e){ alert(e.message); } }
     async function handleRejectExt(id) { if(!confirm("Reject?")) return; try { const tx = await marketContract.rejectExtension(id); await tx.wait(); alert("Rejected!"); loadData(); } catch(e){ alert(e.message); } }
@@ -285,7 +293,7 @@
     async function makeOffer(id, p) { const r = document.getElementById("r_"+id).value; if(!r) return alert("Enter Rate"); try { const u = new ethers.Contract(USDC_ADDR, USDC_ABI, signer); if((await u.allowance(userAddress, MARKET_ADDR)) < ethers.parseUnits(p.toString(),6)) await(await u.approve(MARKET_ADDR, ethers.MaxUint256)).wait(); await(await marketContract.makeOffer(id, BigInt(r))).wait(); alert("Offer Sent!"); loadData(); } catch(e){ alert(e.message); } }
     async function handleCancelOffer(id) { if(!confirm("Cancel?")) return; try { const tx = await marketContract.cancelOffer(id); await tx.wait(); loadData(); } catch(e){ alert(e.message); } }
 
-    async function handleExtend(id) { const d = prompt("New Duration (MINUTES):"); if(!d) return; await signAndRelay("requestExtension", [id, BigInt(d)]); alert("Requested!"); }
+    async function handleExtend(id) { const d = prompt("New Duration (DAYS):"); if(!d) return; await signAndRelay("requestExtension", [id, BigInt(d)]); alert("Requested!"); }
     async function handleAutoExtend(id) { if(!confirm("Auto-Extend?")) return; await signAndRelay("acceptExtension", [id]); alert("Auto-Extended!"); loadData(); }
     async function handleAcceptOffer(id) { if(confirm("Accept?")) await signAndRelay("acceptOffer", [id]); loadData(); }
     async function handleCancelRequest(id) { if(confirm("Cancel?")) await signAndRelay("cancelRequest", [id]); loadData(); }

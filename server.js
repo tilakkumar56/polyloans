@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const crypto = require('crypto');
-// 🔥 ENSURE getAddress IS IMPORTED 🔥
 const { createPublicClient, createWalletClient, http, parseAbi, toHex, getAddress } = require('viem');
 const { privateKeyToAccount } = require('viem/accounts');
 const { polygon } = require('viem/chains');
@@ -13,7 +12,7 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // 🔥 PASTE NEW CONTRACT ADDRESS HERE AFTER DEPLOYMENT 🔥
-const MARKET_ADDR = "0x9Edef523B68616380d16fA1052642b469F4C5A7E"; 
+const MARKET_ADDR = "0xDDd7902d60B26190c909276Dac6391D991E0B8E5"; 
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
 const API_KEY = process.env.POLY_API_KEY;
 const API_SECRET = process.env.POLY_API_SECRET;
@@ -36,20 +35,15 @@ async function fetchMarketTitle(tokenId) {
 async function resolveProxy(user) {
     if (!user) return null;
     const u = user.toLowerCase();
-    
-    // 1. Try Gamma (Fastest)
     try {
         const r = await axios.get(`https://gamma-api.polymarket.com/users/${u}`);
         if (r.data?.proxyWallet) return r.data.proxyWallet.toLowerCase();
     } catch(e) {}
-
-    // 2. Try New Gnosis API (With Checksum)
     try {
         const checksumAddr = getAddress(u);
         const r = await axios.get(`https://api.safe.global/tx-service/pol/api/v1/owners/${checksumAddr}/safes/`);
         if (r.data?.safes && r.data.safes.length > 0) return r.data.safes[0].toLowerCase();
     } catch(e) {}
-    
     return null;
 }
 
@@ -66,9 +60,7 @@ app.get('/get-nonce', async (req, res) => {
     try {
         let proxy = req.query.proxy;
         if (!proxy) proxy = await resolveProxy(req.query.user);
-        
         if (!proxy) return res.status(404).json({ error: "No Proxy Found" });
-        
         const client = createPublicClient({ chain: polygon, transport: http("https://polygon-bor-rpc.publicnode.com") });
         const nonce = await client.readContract({ address: proxy, abi: SAFE_ABI, functionName: 'nonce' });
         res.json({ nonce: nonce.toString(), proxy });
@@ -89,49 +81,33 @@ app.post('/relay-tx', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 🔥 ROBUST PORTFOLIO SCANNER 🔥
 app.get('/portfolio', async (req, res) => {
     const { user } = req.query;
     if (!user) return res.json([]);
-    
-    // Scan both EOA and Proxy
     const targets = new Set();
     targets.add(user.toLowerCase());
-    
     const proxy = await resolveProxy(user);
     if (proxy) targets.add(proxy);
-
     console.log(`🔎 Scanning Targets: ${Array.from(targets).join(', ')}`);
-
     let allPos = [];
-    const headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept': 'application/json'
-    };
-
+    const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Accept': 'application/json' };
     for (const t of targets) {
         try {
-            // Method 1: Data API
             const url = `https://data-api.polymarket.com/positions?user=${t}&sizeThreshold=0&limit=50`;
             const r = await axios.get(url, { headers });
             if (Array.isArray(r.data)) allPos.push(...r.data);
         } catch(e) { console.log(`Data API failed for ${t}`); }
-
         try {
-            // Method 2: Gamma API
             const url2 = `https://gamma-api.polymarket.com/positions?user=${t}`;
             const r2 = await axios.get(url2, { headers });
             if (Array.isArray(r2.data)) allPos.push(...r2.data);
         } catch(e) { console.log(`Gamma API failed for ${t}`); }
     }
-
-    // Deduplicate
     const uniquePos = allPos.reduce((acc, current) => {
         const x = acc.find(item => item.asset === current.asset);
         if (!x) return acc.concat([current]);
         return acc;
     }, []);
-
     const rich = await Promise.all(uniquePos.map(async (p) => {
         if(Number(p.size) < 0.000001) return null; 
         try {
@@ -143,7 +119,6 @@ app.get('/portfolio', async (req, res) => {
             return { ...p, livePrice: r.data.price };
         } catch { return { ...p, livePrice: "0.50" }; } 
     }));
-
     res.json(rich.filter(p => p !== null));
 });
 

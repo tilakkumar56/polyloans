@@ -1,19 +1,22 @@
-// hardhat.config.js
-require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
+require("@nomicfoundation/hardhat-toolbox");
 
+/** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  // 🔥 UPDATED COMPILER VERSION 🔥
-  solidity: "0.8.20", 
-  networks: {
-    polygon: {
-      url: process.env.POLYGON_RPC_URL || "https://polygon-bor-rpc.publicnode.com",
-      accounts: [process.env.PRIVATE_KEY],
-      // Aggressive gas settings to ensure it goes through
-      gasPrice: 250000000000, // 250 Gwei
+  solidity: {
+    version: "0.8.20", // Matches the version in your Solidity files
+    settings: {
+      optimizer: {
+        enabled: true, // This helps save gas
+        runs: 200,
+      },
     },
   },
-  etherscan: {
-    apiKey: process.env.POLYGONSCAN_API_KEY // Optional: If you verify later
-  }
+  networks: {
+    // This is the part that was missing
+    polygon: {
+      url: process.env.POLYGON_RPC_URL || "https://polygon-rpc.com",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
+  },
 };
