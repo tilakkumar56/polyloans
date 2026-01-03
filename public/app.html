@@ -30,8 +30,6 @@
         .glass-input:focus { border-color: #6366F1; outline: none; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
         .tab-active { border-bottom: 2px solid #6366F1; color: white; }
         .tab-inactive { color: #6B7280; }
-        .blink { animation: blinker 1s linear infinite; }
-        @keyframes blinker { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col">
@@ -46,12 +44,16 @@
             <div class="hidden md:flex h-full gap-6">
                 <button onclick="setTab('borrow')" id="tab-borrow" class="tab-active h-full px-2 text-sm font-bold border-b-2 border-transparent hover:text-white transition">Borrow</button>
                 <button onclick="setTab('lend')" id="tab-lend" class="tab-inactive h-full px-2 text-sm font-bold border-b-2 border-transparent hover:text-white transition">Lend / Buyout</button>
-                <button onclick="setTab('portfolio')" id="tab-portfolio" class="tab-inactive h-full px-2 text-sm font-bold border-b-2 border-transparent hover:text-white transition">My Portfolio</button>
             </div>
 
-            <button id="connectBtn" onclick="connectWallet()" class="bg-white text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 transition">
-                Connect Wallet
-            </button>
+            <div class="flex items-center gap-4">
+                <div id="proxy-indicator" class="hidden text-[10px] font-mono text-emerald-500 bg-emerald-900/20 px-2 py-1 rounded border border-emerald-900">
+                    Proxy Active
+                </div>
+                <button id="connectBtn" onclick="connectWallet()" class="bg-white text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 transition">
+                    Connect Wallet
+                </button>
+            </div>
         </div>
     </nav>
 
@@ -61,13 +63,13 @@
             <div class="lg:col-span-4 space-y-6">
                 <div class="glass-panel p-6 rounded-xl sticky top-24">
                     <h2 class="text-xl font-bold text-white mb-1">Create Request</h2>
-                    <p class="text-sm text-gray-500 mb-6">Pledge shares for instant USDC.</p>
+                    <p class="text-sm text-gray-500 mb-6">Pledge shares directly from Polymarket.</p>
 
                     <div class="space-y-4">
                         <div>
                             <label class="text-xs font-mono text-gray-500 uppercase flex justify-between">
                                 <span>Token ID</span>
-                                <span class="text-indigo-400 cursor-pointer" onclick="toggleScan()">Scan Wallet</span>
+                                <span class="text-indigo-400 cursor-pointer" onclick="toggleScan()">Scan Portfolio</span>
                             </label>
                             
                             <select id="scanSelect" onchange="autoFill()" class="hidden glass-input w-full px-4 py-3 rounded-lg mt-1 font-mono text-xs">
@@ -94,8 +96,8 @@
 
                         <div id="ltv-indicator" class="text-right text-[10px] font-mono text-gray-500 h-4"></div>
                         
-                        <button onclick="createRequest()" id="btn-create" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg transition mt-2">
-                            Create Request
+                        <button onclick="handleCreateRequest()" id="btn-create" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg transition mt-2">
+                            Sign & Relay Request
                         </button>
                     </div>
                 </div>
@@ -123,12 +125,10 @@
                 </div>
                 <div id="market-feed" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 </div>
+                
+                <h2 class="text-xl font-bold text-white mt-12 mb-6">My Investments</h2>
+                <div id="my-investments" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
             </div>
-        </div>
-
-        <div id="view-portfolio" class="hidden space-y-6">
-            <h2 class="text-xl font-bold text-white">My Investments</h2>
-            <div id="my-investments" class="space-y-4"></div>
         </div>
 
     </main>
@@ -136,34 +136,22 @@
     <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
 
     <script>
+        // --- CONFIG ---
         const CONTRACT_ADDRESS = "0xDDd7902d60B26190c909276Dac6391D991E0B8E5";
         const USDC_ADDRESS = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
         const POLY_ADDRESS = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045";
         const RENDER_API = "https://polyloans-api.onrender.com";
 
-        const ABI = [
-            "function createRequest(uint256,uint256,uint256,uint256)",
-            "function makeOffer(uint256,uint256)",
-            "function acceptOffer(uint256)",
-            "function repayLoan(uint256)",
-            "function liquidateByTime(uint256)",
-            "function cancelRequest(uint256)",
-            "function requestExtension(uint256, uint256)",
-            "function acceptExtension(uint256)",
-            "function rejectExtension(uint256)",
-            "function buyoutLoan(uint256)",
-            "function nextRequestId() view returns (uint256)",
-            "function nextOfferId() view returns (uint256)",
-            "function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)",
-            "function loans(uint256) view returns (address, uint256, uint256, uint256)",
-            "function offers(uint256) view returns (uint256, address, uint256, bool)",
-            "function extensions(uint256) view returns (bool, uint256, uint256, bool, uint256)"
-        ];
-        const TOKEN_ABI = ["function approve(address, uint256) public returns (bool)", "function allowance(address, address) view returns (uint256)", "function setApprovalForAll(address, bool)", "function isApprovedForAll(address, address) view returns (bool)"];
+        // --- ABIs ---
+        const ABI = ["function createRequest(uint256,uint256,uint256,uint256)", "function makeOffer(uint256,uint256)", "function acceptOffer(uint256)", "function repayLoan(uint256)", "function liquidateByTime(uint256)", "function cancelRequest(uint256)", "function requestExtension(uint256, uint256)", "function acceptExtension(uint256)", "function rejectExtension(uint256)", "function buyoutLoan(uint256)", "function nextRequestId() view returns (uint256)", "function nextOfferId() view returns (uint256)", "function requests(uint256) view returns (address, uint256, uint256, uint256, uint256, bool, bool)", "function loans(uint256) view returns (address, uint256, uint256, uint256)", "function offers(uint256) view returns (uint256, address, uint256, bool)", "function extensions(uint256) view returns (bool, uint256, uint256, bool, uint256)"];
+        const TOKEN_ABI = ["function approve(address, uint256) public returns (bool)", "function allowance(address, address) view returns (uint256)", "function setApprovalForAll(address, bool)", "function isApprovedForAll(address, address) view returns (bool)", "function balanceOf(address, uint256) view returns (uint256)"];
 
+        // --- STATE ---
         let provider, signer, contract, userAddress;
+        let myProxyAddress = null;
         let CACHE_INFO = {};
 
+        // --- TOASTS ---
         function showToast(title, msg, type='success') {
             const c = document.getElementById('toast-container');
             let color = type==='error'?'border-red-500 text-red-500':(type==='info'?'border-blue-500 text-blue-500':'border-green-500 text-green-500');
@@ -175,7 +163,7 @@
         }
 
         function setTab(t) {
-            ['borrow','lend','portfolio'].forEach(x => {
+            ['borrow','lend'].forEach(x => {
                 document.getElementById(`view-${x}`).classList.add('hidden');
                 document.getElementById(`tab-${x}`).classList.replace('tab-active','tab-inactive');
                 document.getElementById(`tab-${x}`).classList.remove('border-indigo-500');
@@ -185,6 +173,7 @@
             document.getElementById(`tab-${t}`).classList.add('border-indigo-500');
         }
 
+        // --- CONNECT & PROXY FINDER ---
         async function connectWallet() {
             if (!window.ethereum) return showToast("Error", "No Wallet Found", "error");
             try {
@@ -195,22 +184,127 @@
                 
                 document.getElementById("connectBtn").innerText = userAddress.slice(0,6) + "...";
                 showToast("Connected", "Wallet active");
+                
+                // 1. Fetch Proxy Address from API
+                await fetchProxyAddress();
+                
                 loadData();
             } catch (e) { showToast("Error", e.message, "error"); }
         }
 
+        async function fetchProxyAddress() {
+            try {
+                const r = await fetch(`${RENDER_API}/get-nonce?user=${userAddress}`);
+                const d = await r.json();
+                if(d.proxy) {
+                    myProxyAddress = d.proxy.toLowerCase();
+                    document.getElementById("proxy-indicator").classList.remove("hidden");
+                    document.getElementById("proxy-indicator").innerText = `Proxy: ${myProxyAddress.slice(0,6)}...`;
+                    console.log("Proxy Found:", myProxyAddress);
+                } else {
+                    console.warn("No Proxy Found for this user");
+                }
+            } catch(e) { console.error("API Error", e); }
+        }
+
+        // --- GNOSIS SAFE RELAYER ---
+        async function signAndRelayGeneric(toAddr, data) {
+            try {
+                let url = `${RENDER_API}/get-nonce?user=${userAddress}`;
+                const nonceRes = await fetch(url);
+                const meta = await nonceRes.json();
+                
+                if(!meta.proxy) throw new Error("No Gnosis Proxy found. Withdraw to EOA or create one.");
+
+                const types = { SafeTx: [{type:"address",name:"to"},{type:"uint256",name:"value"},{type:"bytes",name:"data"},{type:"uint8",name:"operation"},{type:"uint256",name:"safeTxGas"},{type:"uint256",name:"baseGas"},{type:"uint256",name:"gasPrice"},{type:"address",name:"gasToken"},{type:"address",name:"refundReceiver"},{type:"uint256",name:"nonce"}] };
+                
+                const message = { to: toAddr, value: 0, data, operation: 0, safeTxGas: 0, baseGas: 0, gasPrice: 0, gasToken: "0x0000000000000000000000000000000000000000", refundReceiver: "0x0000000000000000000000000000000000000000", nonce: meta.nonce };
+                
+                const payload = JSON.stringify({ types: { EIP712Domain: [{name:"chainId",type:"uint256"}, {name:"verifyingContract",type:"address"}], SafeTx: types.SafeTx }, primaryType: "SafeTx", domain: { verifyingContract: meta.proxy, chainId: 137 }, message });
+                
+                // Ask User to Sign
+                const sig = await window.ethereum.request({ method: "eth_signTypedData_v4", params: [userAddress, payload] });
+                
+                // Relay to Backend
+                const res = await fetch(`${RENDER_API}/relay-tx`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy: meta.proxy, to: toAddr, data, signature: sig }) });
+                const json = await res.json();
+                
+                if(!json.success) throw new Error(json.error);
+                return json.txHash;
+            } catch(e) { 
+                console.error(e);
+                throw new Error(e.message); 
+            }
+        }
+
+        async function signAndRelay(func, args) {
+            const iface = new ethers.Interface(ABI);
+            const data = iface.encodeFunctionData(func, args);
+            return await signAndRelayGeneric(CONTRACT_ADDRESS, data);
+        }
+
+        // --- APP LOGIC ---
+        async function handleCreateRequest() {
+            if(!myProxyAddress) return showToast("Error", "No Polymarket Proxy found. Deposit funds to Poly first?", "error");
+            
+            const id = document.getElementById("tokenId").value;
+            const s = document.getElementById("shares").value;
+            const p = document.getElementById("principal").value;
+            const d = document.getElementById("duration").value;
+
+            if(!id || !s || !p || !d) return showToast("Error", "Fill all fields", "error");
+
+            try {
+                showToast("Checking", "Verifying Proxy Balance...", "info");
+                
+                const poly = new ethers.Contract(POLY_ADDRESS, TOKEN_ABI, signer);
+                const sharesWei = ethers.parseUnits(s, 6); // 6 Decimals for Shares
+                
+                // 1. CHECK PROXY BALANCE (The Fix for Overflow)
+                const proxyBal = await poly.balanceOf(myProxyAddress, id);
+                
+                if(proxyBal < sharesWei) {
+                    const readable = ethers.formatUnits(proxyBal, 6);
+                    showToast("Overflow Error", `Your Proxy (${myProxyAddress.slice(0,6)}) only has ${readable} shares.`, "error");
+                    return;
+                }
+
+                // 2. CHECK APPROVAL (Proxy -> Contract)
+                const isAppr = await poly.isApprovedForAll(myProxyAddress, CONTRACT_ADDRESS);
+                if(!isAppr) {
+                    showToast("Approval", "Signing Proxy Approval...", "info");
+                    const iface = new ethers.Interface(TOKEN_ABI);
+                    const data = iface.encodeFunctionData("setApprovalForAll", [CONTRACT_ADDRESS, true]);
+                    await signAndRelayGeneric(POLY_ADDRESS, data);
+                    showToast("Approved", "Wait a moment for network...", "success");
+                    await new Promise(r => setTimeout(r, 4000)); // Wait for blockchain
+                }
+
+                // 3. CREATE REQUEST via Relayer
+                showToast("Signing", "Signing Request...", "info");
+                await signAndRelay("createRequest", [id, sharesWei, ethers.parseUnits(p, 6), BigInt(d)*86400n]);
+                
+                showToast("Success", "Request Relayed!", "success");
+                setTimeout(loadData, 3000);
+
+            } catch(e) { showToast("Error", e.message.slice(0,60), "error"); }
+        }
+
+        // --- HELPER FUNCTIONS ---
         async function toggleScan() {
             const sel = document.getElementById("scanSelect");
             const inp = document.getElementById("tokenId");
             if(sel.classList.contains("hidden")) {
                 sel.classList.remove("hidden"); inp.classList.add("hidden");
                 try {
-                    const r = await fetch(`${RENDER_API}/portfolio?user=${userAddress}`);
+                    // Use Proxy address for portfolio scan if available
+                    const target = myProxyAddress || userAddress;
+                    const r = await fetch(`${RENDER_API}/portfolio?user=${target}`);
                     const d = await r.json();
                     sel.innerHTML = '<option value="">-- Select Asset --</option>';
                     d.forEach(x => {
                         let opt = document.createElement("option");
-                        opt.value = x.asset; opt.text = `${x.title} (${Number(x.size).toFixed(1)})`;
+                        opt.value = x.asset; opt.text = `${x.title} [${x.outcome||'?'}] (${Number(x.size).toFixed(1)})`;
                         opt.setAttribute('data-price', x.livePrice);
                         sel.appendChild(opt);
                     });
@@ -229,7 +323,6 @@
             const p = Number(document.getElementById("principal").value);
             const sel = document.getElementById("scanSelect");
             const div = document.getElementById("ltv-indicator");
-            
             if(!sel.classList.contains("hidden") && sel.selectedIndex > 0) {
                 const price = Number(sel.options[sel.selectedIndex].getAttribute('data-price')) || 0.5;
                 const max = (s * price) * 0.5; 
@@ -247,37 +340,14 @@
             } catch { return { title: "Unknown Market", slug: "" }; }
         }
 
-        async function createRequest() {
-            if(!contract) return showToast("Wallet", "Connect first", "info");
-            const id = document.getElementById("tokenId").value;
-            const s = document.getElementById("shares").value;
-            const p = document.getElementById("principal").value;
-            const d = document.getElementById("duration").value;
-
-            try {
-                const poly = new ethers.Contract(POLY_ADDRESS, TOKEN_ABI, signer);
-                if(!(await poly.isApprovedForAll(userAddress, CONTRACT_ADDRESS))) {
-                    showToast("Approval", "Please approve collateral transfer", "info");
-                    await(await poly.setApprovalForAll(CONTRACT_ADDRESS, true)).wait();
-                }
-                
-                showToast("Signing", "Create Request...", "info");
-                const tx = await contract.createRequest(id, ethers.parseUnits(s,0), ethers.parseUnits(p,6), BigInt(d)*86400n);
-                await tx.wait();
-                showToast("Success", "Request Created!", "success");
-                loadData();
-            } catch(e) { showToast("Error", e.message.slice(0,50), "error"); }
-        }
-
+        // --- LOAD DATA ---
         async function loadData() {
             if(!contract) return;
             const nextId = Number(await contract.nextRequestId());
             const nextOff = Number(await contract.nextOfferId());
             
             let offers = [];
-            for(let i=1; i<nextOff; i++) {
-                try { offers.push({id:i, ...await contract.offers(i)}); } catch{}
-            }
+            for(let i=1; i<nextOff; i++) { try { offers.push({id:i, ...await contract.offers(i)}); } catch{} }
 
             let myReqHtml = "", marketHtml = "", portHtml = "";
 
@@ -288,25 +358,29 @@
                     
                     const info = await getInfo(req[1]);
                     const princ = ethers.formatUnits(req[3], 6);
-                    const shares = req[2];
+                    const shares = ethers.formatUnits(req[2], 6);
                     const durDays = Number(req[4])/86400;
                     
                     let extData = null;
                     try { const e = await contract.extensions(i); if(e[0]) extData = e; } catch{}
 
-                    if(req[0].toLowerCase() === userAddress.toLowerCase()) {
+                    // CHECK IF I AM BORROWER (Check against User OR Proxy)
+                    const borrower = req[0].toLowerCase();
+                    const isMe = (borrower === userAddress.toLowerCase()) || (myProxyAddress && borrower === myProxyAddress);
+
+                    if(isMe) {
                         let status = "PENDING";
                         let action = `<button onclick="cancelReq(${i})" class="text-xs text-red-500 border border-red-900 px-2 py-1 rounded">Cancel</button>`;
                         
-                        if(req[5] && !req[6]) { // Active Request
+                        if(req[5] && !req[6]) { 
                             const myOffers = offers.filter(o => o[0] == i && o[3]);
                             if(myOffers.length > 0) {
                                 action = myOffers.map(o => `<button onclick="acceptOff(${o.id})" class="bg-green-600 text-xs px-2 py-1 rounded text-white mr-2">Accept ${Number(o[2])}% APR</button>`).join('');
                             }
-                        } else if(req[5] && req[6]) { // Active Loan
+                        } else if(req[5] && req[6]) { 
                             const loan = await contract.loans(i);
                             status = "ACTIVE LOAN";
-                            action = `<button onclick="repay(${i}, ${princ}, ${loan[2]}, ${Number(loan[3])})" class="bg-indigo-600 text-white text-xs px-3 py-1 rounded">Repay</button>`;
+                            action = `<button onclick="repay(${i})" class="bg-indigo-600 text-white text-xs px-3 py-1 rounded">Repay</button>`;
                             
                             const end = Number(loan[1]) + Number(loan[3]);
                             const now = Math.floor(Date.now()/1000);
@@ -323,28 +397,22 @@
                             <div class="mt-4 flex flex-wrap gap-2">${action}</div>
                         </div>`;
                     } else {
-                        // MARKET FEED (LENDER VIEW)
                         if(req[5] && !req[6]) {
                             marketHtml += `
                             <div class="glass-panel p-5 rounded-xl border border-gray-800 hover:border-indigo-500/50 transition">
                                 <div class="font-bold text-white text-sm mb-2">#${i} ${info.title}</div>
-                                <div class="flex justify-between text-xs text-gray-500 mb-4">
-                                    <span>Ask: $${princ}</span><span>${durDays} Days</span>
-                                </div>
+                                <div class="flex justify-between text-xs text-gray-500 mb-4"><span>Ask: $${princ}</span><span>${durDays} Days</span></div>
                                 <div class="flex gap-2">
                                     <input id="apr_${i}" placeholder="APR%" class="w-16 bg-black border border-gray-700 rounded text-center text-xs text-white">
                                     <button onclick="makeOffer(${i}, ${princ})" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded py-2">Offer Loan</button>
                                 </div>
                             </div>`;
-                        } else if(req[6] && req[5]) { // ACTIVE LOAN (Check for Buyout)
+                        } else if(req[6] && req[5]) { 
                             const loan = await contract.loans(i);
                             if(loan[0].toLowerCase() === userAddress.toLowerCase()) {
-                                // I am the lender
                                 portHtml += `<div class="glass-panel p-4 rounded-xl border border-emerald-900/30"><div class="text-sm font-bold text-white">Loan #${i} - ${info.title}</div><div class="text-xs text-emerald-500 mt-1">Active Investment ($${princ})</div></div>`;
                             }
-                            
-                            // Check Buyout
-                            if(extData && extData[3]) { // isRejected = true
+                            if(extData && extData[3]) {
                                 const now = Math.floor(Date.now()/1000);
                                 if(now < Number(extData[4]) + 86400) {
                                     marketHtml += `
@@ -365,7 +433,13 @@
             document.getElementById("my-investments").innerHTML = portHtml || '<div class="text-center text-gray-600 py-4">No investments</div>';
         }
 
-        // --- ACTIONS ---
+        // --- RELAY ACTIONS ---
+        async function cancelReq(id) { if(confirm("Cancel?")) await signAndRelay("cancelRequest", [id]); loadData(); }
+        async function acceptOff(oid) { await signAndRelay("acceptOffer", [oid]); loadData(); }
+        async function reqExt(id) { const d = prompt("Days:"); if(d) await signAndRelay("requestExtension", [id, BigInt(d)]); }
+        
+        // --- DIRECT ACTIONS (Using EOA, not Proxy) ---
+        // Lenders usually lend from EOA (Metamask), not Proxy. So we keep these direct.
         async function makeOffer(id, p) {
             const r = document.getElementById(`apr_${id}`).value;
             if(!r) return showToast("Error", "Enter APR", "error");
@@ -377,30 +451,19 @@
                     await(await u.approve(CONTRACT_ADDRESS, ethers.MaxUint256)).wait();
                 }
                 const tx = await contract.makeOffer(id, BigInt(r));
-                await tx.wait(); showToast("Sent", "Offer Placed!");
+                await tx.wait(); showToast("Sent", "Offer Placed!"); loadData();
             } catch(e) { showToast("Error", e.message, "error"); }
         }
 
-        async function acceptOff(oid) {
-            try { await(await contract.acceptOffer(oid)).wait(); showToast("Success", "Loan Started!"); loadData(); } catch(e){ showToast("Error", e.message, "error"); }
-        }
-
-        async function repay(id, p, r, d) {
+        async function repay(id) {
+            // Note: If user wants to repay from Proxy, we need signAndRelay.
+            // But usually USDC is in EOA. Let's assume EOA for now.
+            // If you need Proxy repay, uncomment next line:
+            // await signAndRelay("repayLoan", [id]); return;
             try {
-                const interest = (Number(p)*Number(r)*Number(d)) / (31536000 * 100);
-                const total = Number(p) + interest;
-                const u = new ethers.Contract(USDC_ADDRESS, TOKEN_ABI, signer);
-                const amt = ethers.parseUnits((total*1.01).toFixed(6), 6);
-                if((await u.allowance(userAddress, CONTRACT_ADDRESS)) < amt) {
-                    await(await u.approve(CONTRACT_ADDRESS, ethers.MaxUint256)).wait();
-                }
-                await(await contract.repayLoan(id)).wait(); showToast("Success", "Loan Repaid!"); loadData();
-            } catch(e){ showToast("Error", e.message, "error"); }
-        }
-
-        async function reqExt(id) {
-            const d = prompt("Days to extend:");
-            if(d) { await(await contract.requestExtension(id, BigInt(d))).wait(); showToast("Sent", "Extension Requested"); }
+                const tx = await contract.repayLoan(id);
+                await tx.wait(); showToast("Success", "Repaid!"); loadData();
+            } catch(e) { showToast("Error", e.message, "error"); }
         }
 
         async function buyout(id, p) {
@@ -408,12 +471,8 @@
                 const u = new ethers.Contract(USDC_ADDRESS, TOKEN_ABI, signer);
                 const amt = ethers.parseUnits(p, 6);
                 if((await u.allowance(userAddress, CONTRACT_ADDRESS)) < amt) await(await u.approve(CONTRACT_ADDRESS, ethers.MaxUint256)).wait();
-                await(await contract.buyoutLoan(id)).wait(); showToast("Success", "Loan Bought!"); loadData();
+                await(await contract.buyoutLoan(id)).wait(); showToast("Success", "Bought!"); loadData();
             } catch(e){ showToast("Error", e.message, "error"); }
-        }
-
-        async function cancelReq(id) {
-            if(confirm("Cancel Request?")) { await(await contract.cancelRequest(id)).wait(); loadData(); }
         }
     </script>
 </body>
